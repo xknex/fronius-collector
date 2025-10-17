@@ -35,7 +35,7 @@ This script collects real-time energy data from Fronius GEN24 inverters via HTTP
 
 ## 📦 Prerequisites
 
-- **Python 3.8+** (tested on Python 3.13)
+- **Docker Engine and Docker Compose**
 - **Fronius Inverter** (GEN24 or compatible model)
 - **InfluxDB 2.x** (for time-series data storage)
   - An existing bucket (eg named "fronius)
