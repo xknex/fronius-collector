@@ -127,28 +127,7 @@ After installation:
 ### 🔧 Configuration Details
 
 The container is configured for runtime with the following environment variables best declared in a separate .env file.
-  ```yaml title="Example .env file"
-# Inverter
-FRONIUS_INVERTER_HOST=HOSTNAME_OR_IP
-FRONIUS_INVERTER_USE_HTTPS=false
-FRONIUS_INVERTER_VERIFY_SSL=false
-FRONIUS_INVERTER_DEVICE_ID=1
-
-# Influx
-INFLUX_URL=http://HOSTNAME_OR_IP:8086
-INFLUX_TOKEN=SECRET
-INFLUX_ORG=org
-INFLUX_BUCKET=fronius
-
-# Polling/tags
-POLLING_INTERVAL=10
-TAG_SOURCE=SymoGEN24
-TAG_SITE=home
-
-# Extra tags (optional)
-TAGS=location=home,env=prod
-  ```
----
+See example below.
 
 ## 📊 Data Structure
 
