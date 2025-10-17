@@ -1,0 +1,29 @@
+services:
+  collector:
+    env_file:
+      - .env
+    image: fronius-collector
+    container_name: fronius-collector
+    volumes:
+      - ./logs:/app/logs
+    # Healthcheck ensures container is alive and responding
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f collector_docker.py >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+  influxdb2:
+    image: influxdb:2
+    ports:
+      - 8086:8086
+    volumes:
+      - type: volume
+        source: influxdb2-data
+        target: /var/lib/influxdb2
+      - type: volume
+        source: influxdb2-config
+        target: /etc/influxdb2
+volumes:
+  influxdb2-data:
+  influxdb2-config:
