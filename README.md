@@ -214,8 +214,11 @@ You can build the Docker image either **manually** or **via Docker Compose**.
 #### ✅ Option 1: Build with Docker CLI
 
 ```bash
+# Pull repository from Github
+git clone https://github.com/xknex/fronius-collector.git
+
 # Navigate to the project directory
-cd path/to/your/project
+cd ./fronius-collector
 
 # Build the Docker image
 docker build -t fronius-collector .
