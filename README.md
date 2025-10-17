@@ -315,6 +315,6 @@ Contributions are welcome! Please submit a pull request or open an issue for sug
 
 ## 🔗 Links
 
-- [GitHub Repository](https://github.com/yourusername/frondius-collector)
+- [GitHub Repository](https://github.com/xknex/frondius-collector)
 - [InfluxDB Documentation](https://docs.influxdata.com/)
 - [Fronius Inverter API Docs](https://www.fronius.com/en/products/solar-inverters)
