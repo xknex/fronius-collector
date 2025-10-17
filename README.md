@@ -186,11 +186,7 @@ docker-compose --version
 
 ---
 
-### 🧱 Step 1: Build the Docker Image
-
-You can build the Docker image either **manually** or **via Docker Compose**.
-
-#### ✅ Option 1: Build with Docker CLI
+### 🧱 Step 1: Build the Docker Image with Docker CLI
 
 ```bash
 # Pull repository from Github
@@ -202,14 +198,6 @@ cd ./fronius-collector
 # Build the Docker image
 docker build -t fronius-collector .
 ```
-
-#### ✅ Option 2: Build with Docker Compose
-
-```bash
-# Build the image using docker-compose
-docker-compose build
-```
-
 ---
 
 ### 📁 Step 2: Create and Configure the `.env` File
