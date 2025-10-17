@@ -242,6 +242,7 @@ This will:
 
 > 📌 If you're not using InfluxDB, remove the `influxdb2` service from the `docker-compose.yaml` file.
 
+> **If your ./logs directory is not created automatically, there could be a permission problem, which has been observed on Windows environments. You can create it manually inside the `fronius-collector` direcory.**
 ---
 
 ### 📊 Step 4: Verify the Collector
