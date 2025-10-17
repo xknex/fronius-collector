@@ -143,7 +143,7 @@ DEFAULT_CONFIG = {
         "device_id": 1
     },
     "influxdb": {
-        "url": "http://OUR_INFLUXDB_HOST:8086",
+        "url": "http://YOUR_INFLUXDB_HOST:8086",
         "token": "YOUR_INFLUXDB_TOKEN",
         "org": "org",
         "bucket": "fronius_clean"
