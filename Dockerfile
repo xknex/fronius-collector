@@ -1,5 +1,5 @@
 # Use a small official Python image
-FROM python:3.13-slim
+FROM python:3.13-alpine
 
 # Avoid buffering (useful for logs)
 ENV PYTHONUNBUFFERED=1
