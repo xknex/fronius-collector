@@ -2,6 +2,8 @@
 
 A dockerized Python script for real-time data collection from Fronius GEN24 inverters, with support for InfluxDB, logging, and colorized output. 
 
+<img src="frocol.png" width="512" height="256" alt="Fronius Collector">
+
 **This docker image is aimed at people who don't want to share their solar production and consumption data with external services provided by the hardware vendor. The collected data can bes stored persistantly on your local infrastructure and visualized using Grafana for example.**
 
 ---
