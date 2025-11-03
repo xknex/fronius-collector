@@ -7,11 +7,6 @@ ENV PYTHONUNBUFFERED=1
 # Working directory
 WORKDIR /app
 
-# Install system deps (if needed) and cleanup
-RUN apt-get update && apt-get install -y --no-install-recommends procps\
-        build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy requirements and install python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
