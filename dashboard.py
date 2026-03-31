@@ -1,13 +1,61 @@
-# ───────────────────────────────────────────────────────────────────────────────────────
-#   dashboard.py – Fronius Energy Monitor (dark‑theme mockup, extended metrics)
-# ───────────────────────────────────────────────────────────────────────────────────────
-import streamlit as st
-from datetime import datetime, timedelta
-import pandas as pd
+# ─────────────────────────────────────────────────────────────────────────
+#   dashboard.py – Fronius Energy Monitor (dark‑theme, live InfluxDB)
+# ─────────────────────────────────────────────────────────────────────────
+import os
+from datetime import datetime
 
-# --------------------------------------------------------------------------
-# Configuration & theming
-# --------------------------------------------------------------------------
+import streamlit as st
+from dotenv import load_dotenv
+from influxdb_client import InfluxDBClient
+
+# ---------------------------------------------------------------------------
+# Load environment variables (same as the collector)
+# ---------------------------------------------------------------------------
+load_dotenv()  # .env → os.environ
+INFLUX_URL = os.getenv("INFLUX_URL", "http://localhost:8086")
+INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "")
+INFLUX_ORG = os.getenv("INFLUX_ORG", "org")
+INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "fronius_clean")
+
+if not INFLUX_TOKEN:
+    st.error("❌ INFLUX_TOKEN is not set. Check your .env file.")
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# InfluxDB client
+# ---------------------------------------------------------------------------
+client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
+query_api = client.query_api()
+
+
+# ---------------------------------------------------------------------------
+# Helper – fetch the *latest* value for a field
+# ---------------------------------------------------------------------------
+def fetch_latest(field: str) -> float | None:
+    """
+    Return the most recent value for the given field from the
+    `fronius_clean` measurement.  Returns None if the field is missing.
+    """
+    flux = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+      |> range(start: -10m)
+      |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+      |> filter(fn: (r) => r["_field"] == "{field}")
+      |> last()
+    '''
+    try:
+        result = query_api.query(flux)
+        for table in result:
+            for record in table.records:
+                return record.get_value()
+    except Exception as e:
+        st.warning(f"⚠️ Influx query error for {field}: {e}")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Streamlit layout & theme
+# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Fronius Energy Monitor",
     page_icon="🔋",
@@ -16,11 +64,10 @@ st.set_page_config(
 )
 
 def apply_dark_theme() -> None:
-    """Add custom CSS for a dark theme with muted colours."""
     st.markdown(
         """
         <style>
-        .stApp { background-color:#1e1e2d; color:#e8e8e8; }
+        .stApp { background:#1e1e2d; color:#e8e8e8; }
         .metric-card { background:#181825; border-radius:8px; padding:16px; border:1px solid #3a3a4e; }
         .metric-value{font-size:2rem;font-weight:bold;font-family:'Roboto',sans-serif;}
         .metric-label{font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;color:#8a8a9e;}
@@ -32,52 +79,10 @@ def apply_dark_theme() -> None:
 
 apply_dark_theme()
 
-# --------------------------------------------------------------------------
-# Mock data generator (replace with real InfluxDB queries later)
-# --------------------------------------------------------------------------
-def generate_mock_data() -> dict:
-    """Return a dictionary containing mock PowerFlow data."""
-    now = datetime.now()
-    last_hour = now - timedelta(hours=1)
-    minutes = [last_hour + timedelta(minutes=i) for i in range(60)]
-
-    # Solar production – simple “sun‑curve”
-    solar = [max(0, 2.5 + 1.5 * (1 - abs(i - 15) / 15)) for i in range(60)]
-    # Load – a little oscillating
-    load = [2.0 + 0.5 * (i % 2) for i in range(60)]
-    # Battery state of charge
-    soc = [95 - i % 5 for i in range(60)]
-    # Grid power (export when solar > load)
-    grid = [s - l for s, l in zip(solar, load)]
-
-    total_solar = round(sum(solar), 2)
-    total_load = round(sum(load), 2)
-    total_export = round(sum(max(0, g) for g in grid), 2)
-    total_import = round(sum(max(0, -g) for g in grid), 2)
-
-    df_power = pd.DataFrame(
-        {"timestamp": minutes, "solar_kw": solar, "load_kw": load, "grid_kw": grid}
-    )
-    df_solar = pd.DataFrame(
-        {"timestamp": minutes, "production_kwh": [s * 0.1 for s in solar]}
-    )
-
-    return {
-        "power": df_power,
-        "solar_total": total_solar,
-        "load_total": total_load,
-        "export_total": total_export,
-        "import_total": total_import,
-        "soc": round(soc[-1], 0),
-        "batt_charging": max(0, -sum(grid[-10:]) / 10) / 100,  # kW
-        "batt_discharging": max(0, sum(grid[-10:]) / 10) / 100,  # kW
-    }
-
-# --------------------------------------------------------------------------
-# Helper: metric card
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Helper – metric card
+# ---------------------------------------------------------------------------
 def metric_card(title: str, value: str, icon: str, color: str = "#ffffff") -> None:
-    """Render a single metric card."""
     st.markdown(
         f"""
         <div class="metric-card" style="color: {color}">
@@ -89,15 +94,14 @@ def metric_card(title: str, value: str, icon: str, color: str = "#ffffff") -> No
         unsafe_allow_html=True,
     )
 
-# --------------------------------------------------------------------------
-# Helper: power‑balance bar
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Helper – power‑balance bar
+# ---------------------------------------------------------------------------
 def power_flow_bar(solar: float, load: float, grid: float) -> None:
-    """Show a simple horizontal bar visualising solar, load and export."""
     total = solar + load
     solar_pct = (solar / total * 100) if total > 0 else 0
     load_pct = (load / total * 100) if total > 0 else 0
-    export_pct = max(0, grid / 10)  # arbitrary scaling for visual
+    export_pct = max(0, grid / 10)  # arbitrary scaling
 
     st.markdown(
         f"""
@@ -120,9 +124,9 @@ def power_flow_bar(solar: float, load: float, grid: float) -> None:
         unsafe_allow_html=True,
     )
 
-# --------------------------------------------------------------------------
-# Sidebar – simple settings (placeholder)
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Sidebar – settings (placeholder, same as before)
+# ---------------------------------------------------------------------------
 st.sidebar.title("⚙️ Settings")
 st.sidebar.markdown("### 🔌 Connection Status")
 st.sidebar.success("✅ Connected to InfluxDB")
@@ -135,40 +139,51 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Tabs")
 tab1, tab2, tab3 = st.tabs(["🔍 Real‑time", "📈 History", "⚙️ Settings"])
 
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Real‑time tab
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 with tab1:
     st.header("🌞 Real‑time Energy Overview")
 
-    # Generate the mock data
-    data = generate_mock_data()
+    # Fetch current values
+    solar_current = fetch_latest("Solar_Produced_Current")          # kW
+    load_current = fetch_latest("Consumption_Current")              # kW
+    grid_consumption_current = fetch_latest("Grid_Consumption_Current")  # kW
+    grid_feedin_current = fetch_latest("Grid_FeedIn_Current")            # kW
+    battery_soc = fetch_latest("Battery_SOC")                      # %
+    battery_charging = fetch_latest("Battery_Charging")            # kW
+    battery_discharging = fetch_latest("Battery_Discharging")      # kW
 
-    # ------------------------------------------------------------------
+    # Net grid flow (positive → import, negative → export)
+    grid_val = (grid_consumption_current or 0) - (grid_feedin_current or 0)
+
+    # Totals for the day (kWh)
+    solar_total = fetch_latest("Solar_Produced_Total")            # kWh
+    consumption_total = fetch_latest("Consumption_Total")         # kWh
+    grid_consumption_total = fetch_latest("Grid_Consumption_Total")  # kWh
+    grid_feedin_total = fetch_latest("Grid_FeedIn_Total")         # kWh
+
+    # -----------------------------------------------------------------------
     # First row – core metrics
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         metric_card(
             title="Solar Produced",
-            value=f"{data['solar_total']} kW",
+            value=f"{solar_current:.2f} kW" if solar_current is not None else "—",
             icon="☀️",
             color="#f4a748",
         )
-
     with col2:
         metric_card(
             title="House Load",
-            value=f"{data['load_total']} kW",
+            value=f"{load_current:.2f} kW" if load_current is not None else "—",
             icon="🏠",
             color="#d485d4",
         )
-
-    # Grid power – use positional indexing
-    grid_val = data["power"]["grid_kw"].iloc[-1]
     with col3:
-        grid_str = f"-{grid_val:.2f} kW" if grid_val < 0 else f"{grid_val:.2f} kW"
+        grid_str = f"-{abs(grid_val):.2f} kW" if grid_val < 0 else f"{grid_val:.2f} kW"
         grid_icon = "➡️" if grid_val < 0 else "⬅️"
         metric_card(
             title="Grid Flow",
@@ -176,11 +191,10 @@ with tab1:
             icon=grid_icon,
             color="#7ec853" if grid_val < 0 else "#e76f51",
         )
-
     with col4:
         metric_card(
             title="Battery SOC",
-            value=f"{data['soc']}%",
+            value=f"{battery_soc:.0f}%" if battery_soc is not None else "—",
             icon="🔋",
             color="#71b5ff",
         )
@@ -190,61 +204,61 @@ with tab1:
                 f"""
                 <div style="background:#181825;padding:16px;border-radius:8px;">
                     <div style="font-size:14px;color:#8a8a9e;">Charging Rate</div>
-                    <div style="font-size:2rem;">{data['batt_charging']:.2f} kW</div>
+                    <div style="font-size:2rem;">{battery_charging:.2f} kW</div>
                     <div style="font-size:14px;color:#8a8a9e;margin-top:4px;">Discharging Rate</div>
-                    <div style="font-size:2rem;">{data['batt_discharging']:.2f} kW</div>
+                    <div style="font-size:2rem;">{battery_discharging:.2f} kW</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Second row – total‑energy metrics
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     col5, col6, col7, col8 = st.columns(4)
 
     with col5:
         metric_card(
             title="Total Energy Generated Today",
-            value=f"{data['solar_total']} kWh",
+            value=f"{solar_total:.2f} kWh" if solar_total is not None else "—",
             icon="☀️",
             color="#f4a748",
         )
     with col6:
         metric_card(
             title="Total Energy Consumed Today",
-            value=f"{data['load_total']} kWh",
+            value=f"{consumption_total:.2f} kWh" if consumption_total is not None else "—",
             icon="🏠",
             color="#d485d4",
         )
     with col7:
         metric_card(
             title="Grid Consumption Today",
-            value=f"{data['import_total']} kWh",
+            value=f"{grid_consumption_total:.2f} kWh" if grid_consumption_total is not None else "—",
             icon="⬅️",
             color="#e76f51",
         )
     with col8:
         metric_card(
             title="Grid Feed‑In Today",
-            value=f"{data['export_total']} kWh",
+            value=f"{grid_feedin_total:.2f} kWh" if grid_feedin_total is not None else "—",
             icon="➡️",
             color="#7ec853",
         )
 
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Power‑balance visualisation
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     st.divider()
     power_flow_bar(
-        solar=data["power"]["solar_kw"].iloc[-1],
-        load=data["power"]["load_kw"].iloc[-1],
+        solar=solar_current or 0,
+        load=load_current or 0,
         grid=grid_val,
     )
 
-    # ------------------------------------------------------------------
-    # Bottom totals (duplicate of some cards – optional)
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Bottom totals – optional duplicates of the above
+    # -----------------------------------------------------------------------
     st.divider()
     st.subheader("📊 Cumulative Totals")
 
@@ -253,7 +267,7 @@ with tab1:
         st.markdown(
             f"""
             <div style="background:#181825;padding:12px;border-radius:8px;text-align:center;">
-                <div style="font-size:1.2rem;color:#f4a748;">{data['solar_total']} kWh</div>
+                <div style="font-size:1.2rem;color:#f4a748;">{solar_total:.2f} kWh</div>
                 <div style="font-size:0.8rem;color:#8a8a9e;">Solar Produced</div>
             </div>
             """,
@@ -263,7 +277,7 @@ with tab1:
         st.markdown(
             f"""
             <div style="background:#181825;padding:12px;border-radius:8px;text-align:center;">
-                <div style="font-size:1.2rem;color:#e76f51;">{data['load_total']} kWh</div>
+                <div style="font-size:1.2rem;color:#e76f51;">{consumption_total:.2f} kWh</div>
                 <div style="font-size:0.8rem;color:#8a8a9e;">Total Load</div>
             </div>
             """,
@@ -282,9 +296,9 @@ with tab1:
         unsafe_allow_html=True,
     )
 
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # History tab – placeholder
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 with tab2:
     st.header("📈 Historical Data")
     st.markdown("This section will display InfluxDB historical queries.")
@@ -298,23 +312,23 @@ with tab2:
         unsafe_allow_html=True,
     )
 
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Settings tab – placeholder
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 with tab3:
     st.header("⚙️ Application Settings")
     with st.expander("🔐 Connection Settings"):
-        st.text_input("InfluxDB URL", value="http://your-influx-host:8086")
-        st.text_input("InfluxDB Token", type="password")
-        st.text_input("Org", value="fronius")
-        st.text_input("Bucket", value="fronius_clean")
+        st.text_input("InfluxDB URL", value=INFLUX_URL)
+        st.text_input("InfluxDB Token", type="password", value=INFLUX_TOKEN)
+        st.text_input("Org", value=INFLUX_ORG)
+        st.text_input("Bucket", value=INFLUX_BUCKET)
     st.divider()
     with st.expander("🔒 Security"):
-        st.warning("⚠️ Ensure .env file is in .gitignore before committing to version control.")
+        st.warning("⚠️ Ensure .env is in .gitignore before committing to VCS.")
 
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Footer
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 st.markdown("---")
 st.markdown(
     """
