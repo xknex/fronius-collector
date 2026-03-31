@@ -1,13 +1,13 @@
-# ──────────────────────────────────────────────────────────────────────
-#   dashboard.py – Fronius Energy Monitor (Dark‑theme mockup)
-# ──────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────────────
+#   dashboard.py – Fronius Energy Monitor (dark‑theme mockup, extended metrics)
+# ───────────────────────────────────────────────────────────────────────────────────────
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Configuration & theming
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 st.set_page_config(
     page_title="Fronius Energy Monitor",
     page_icon="🔋",
@@ -15,37 +15,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Inject a dark theme with muted colours
 def apply_dark_theme() -> None:
-    """Add custom CSS for a dark theme (muted palette)."""
+    """Add custom CSS for a dark theme with muted colours."""
     st.markdown(
         """
         <style>
-        .stApp {
-            background-color: #1e1e2d;
-            color: #e8e8e8;
-        }
-        .metric-card {
-            background-color: #181825;
-            border-radius: 8px;
-            padding: 16px;
-            border: 1px solid #3a3a4e;
-        }
-        .metric-value {
-            font-size: 2rem;
-            font-weight: bold;
-            font-family: 'Roboto', sans-serif;
-        }
-        .metric-label {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #8a8a9e;
-        }
-        .icon {
-            font-size: 24px;
-            margin-bottom: 8px;
-        }
+        .stApp { background-color:#1e1e2d; color:#e8e8e8; }
+        .metric-card { background:#181825; border-radius:8px; padding:16px; border:1px solid #3a3a4e; }
+        .metric-value{font-size:2rem;font-weight:bold;font-family:'Roboto',sans-serif;}
+        .metric-label{font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;color:#8a8a9e;}
+        .icon{font-size:24px;margin-bottom:8px;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -53,9 +32,9 @@ def apply_dark_theme() -> None:
 
 apply_dark_theme()
 
-# ------------------------------------------------------------------
-# Mock data generator (used for the preview – replace with real queries later)
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Mock data generator (replace with real InfluxDB queries later)
+# --------------------------------------------------------------------------
 def generate_mock_data() -> dict:
     """Return a dictionary containing mock PowerFlow data."""
     now = datetime.now()
@@ -77,12 +56,7 @@ def generate_mock_data() -> dict:
     total_import = round(sum(max(0, -g) for g in grid), 2)
 
     df_power = pd.DataFrame(
-        {
-            "timestamp": minutes,
-            "solar_kw": solar,
-            "load_kw": load,
-            "grid_kw": grid,
-        }
+        {"timestamp": minutes, "solar_kw": solar, "load_kw": load, "grid_kw": grid}
     )
     df_solar = pd.DataFrame(
         {"timestamp": minutes, "production_kwh": [s * 0.1 for s in solar]}
@@ -96,12 +70,12 @@ def generate_mock_data() -> dict:
         "import_total": total_import,
         "soc": round(soc[-1], 0),
         "batt_charging": max(0, -sum(grid[-10:]) / 10) / 100,  # kW
-        "batt_discharging": max(0, sum(grid[-10:]) / 10) / 100,
+        "batt_discharging": max(0, sum(grid[-10:]) / 10) / 100,  # kW
     }
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Helper: metric card
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 def metric_card(title: str, value: str, icon: str, color: str = "#ffffff") -> None:
     """Render a single metric card."""
     st.markdown(
@@ -115,9 +89,9 @@ def metric_card(title: str, value: str, icon: str, color: str = "#ffffff") -> No
         unsafe_allow_html=True,
     )
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Helper: power‑balance bar
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 def power_flow_bar(solar: float, load: float, grid: float) -> None:
     """Show a simple horizontal bar visualising solar, load and export."""
     total = solar + load
@@ -127,28 +101,28 @@ def power_flow_bar(solar: float, load: float, grid: float) -> None:
 
     st.markdown(
         f"""
-        <div style="background-color: #181825; padding: 12px; border-radius: 8px;">
+        <div style="background:#181825;padding:12px;border-radius:8px;">
             <strong>Real‑time Power Balance</strong><br>
-            <div style="margin-top: 8px;">
-                <div style="background: #f4a748; height: 20px; border-radius: 4px; width: {solar_pct}%; margin-bottom: 4px;"></div>
-                <div style="color: #f4a748; text-align: right;">Solar</div>
+            <div style="margin-top:8px;">
+                <div style="background:#f4a748;height:20px;border-radius:4px;width:{solar_pct}%;margin-bottom:4px;"></div>
+                <div style="color:#f4a748;text-align:right;">Solar</div>
             </div>
             <div>
-                <div style="background: #e76f51; height: 20px; border-radius: 4px; width: {load_pct}%; margin-bottom: 4px;"></div>
-                <div style="color: #e76f51;">Load</div>
+                <div style="background:#e76f51;height:20px;border-radius:4px;width:{load_pct}%;margin-bottom:4px;"></div>
+                <div style="color:#e76f51;">Load</div>
             </div>
             <div>
-                <div style="background: #7ec853; height: 20px; border-radius: 4px; width: {export_pct}%; margin-bottom: 4px;"></div>
-                <div style="color: #7ec853;">Export</div>
+                <div style="background:#7ec853;height:20px;border-radius:4px;width:{export_pct}%;margin-bottom:4px;"></div>
+                <div style="color:#7ec853;">Export</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Sidebar – simple settings (placeholder)
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 st.sidebar.title("⚙️ Settings")
 st.sidebar.markdown("### 🔌 Connection Status")
 st.sidebar.success("✅ Connected to InfluxDB")
@@ -161,9 +135,9 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Tabs")
 tab1, tab2, tab3 = st.tabs(["🔍 Real‑time", "📈 History", "⚙️ Settings"])
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Real‑time tab
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 with tab1:
     st.header("🌞 Real‑time Energy Overview")
 
@@ -171,7 +145,7 @@ with tab1:
     data = generate_mock_data()
 
     # ------------------------------------------------------------------
-    # Metrics – 4 cards
+    # First row – core metrics
     # ------------------------------------------------------------------
     col1, col2, col3, col4 = st.columns(4)
 
@@ -191,11 +165,10 @@ with tab1:
             color="#d485d4",
         )
 
-    # Get the *last* grid value using positional indexing
-    grid_val = data["power"]["grid_kw"].iloc[-1]  # ← fixed line
-
+    # Grid power – use positional indexing
+    grid_val = data["power"]["grid_kw"].iloc[-1]
     with col3:
-        grid_str = f"{-grid_val:.2f} kW" if grid_val < 0 else f"{grid_val:.2f} kW"
+        grid_str = f"-{grid_val:.2f} kW" if grid_val < 0 else f"{grid_val:.2f} kW"
         grid_icon = "➡️" if grid_val < 0 else "⬅️"
         metric_card(
             title="Grid Flow",
@@ -215,25 +188,63 @@ with tab1:
         with st.expander("📦 Battery Status"):
             st.markdown(
                 f"""
-                <div style="background: #181825; padding: 16px; border-radius: 8px;">
-                    <div style="font-size: 14px; color: #8a8a9e;">Charging Rate</div>
-                    <div style="font-size: 2rem;">{data['batt_charging']:.2f} kW</div>
-                    <div style="font-size: 14px; color: #8a8a9e; margin-top: 4px;">Discharging Rate</div>
-                    <div style="font-size: 2rem;">{data['batt_discharging']:.2f} kW</div>
+                <div style="background:#181825;padding:16px;border-radius:8px;">
+                    <div style="font-size:14px;color:#8a8a9e;">Charging Rate</div>
+                    <div style="font-size:2rem;">{data['batt_charging']:.2f} kW</div>
+                    <div style="font-size:14px;color:#8a8a9e;margin-top:4px;">Discharging Rate</div>
+                    <div style="font-size:2rem;">{data['batt_discharging']:.2f} kW</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-    st.divider()
+    # ------------------------------------------------------------------
+    # Second row – total‑energy metrics
+    # ------------------------------------------------------------------
+    col5, col6, col7, col8 = st.columns(4)
 
+    with col5:
+        metric_card(
+            title="Total Energy Generated Today",
+            value=f"{data['solar_total']} kWh",
+            icon="☀️",
+            color="#f4a748",
+        )
+    with col6:
+        metric_card(
+            title="Total Energy Consumed Today",
+            value=f"{data['load_total']} kWh",
+            icon="🏠",
+            color="#d485d4",
+        )
+    with col7:
+        metric_card(
+            title="Grid Consumption Today",
+            value=f"{data['import_total']} kWh",
+            icon="⬅️",
+            color="#e76f51",
+        )
+    with col8:
+        metric_card(
+            title="Grid Feed‑In Today",
+            value=f"{data['export_total']} kWh",
+            icon="➡️",
+            color="#7ec853",
+        )
+
+    # ------------------------------------------------------------------
     # Power‑balance visualisation
+    # ------------------------------------------------------------------
+    st.divider()
     power_flow_bar(
         solar=data["power"]["solar_kw"].iloc[-1],
         load=data["power"]["load_kw"].iloc[-1],
         grid=grid_val,
     )
 
+    # ------------------------------------------------------------------
+    # Bottom totals (duplicate of some cards – optional)
+    # ------------------------------------------------------------------
     st.divider()
     st.subheader("📊 Cumulative Totals")
 
@@ -241,9 +252,9 @@ with tab1:
     with col1:
         st.markdown(
             f"""
-            <div style="background: #181825; padding: 12px; border-radius: 8px; text-align: center;">
-                <div style="font-size: 1.2rem; color: #f4a748;">{data['solar_total']} kWh</div>
-                <div style="font-size: 0.8rem; color: #8a8a9e;">Solar Produced</div>
+            <div style="background:#181825;padding:12px;border-radius:8px;text-align:center;">
+                <div style="font-size:1.2rem;color:#f4a748;">{data['solar_total']} kWh</div>
+                <div style="font-size:0.8rem;color:#8a8a9e;">Solar Produced</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -251,9 +262,9 @@ with tab1:
     with col2:
         st.markdown(
             f"""
-            <div style="background: #181825; padding: 12px; border-radius: 8px; text-align: center;">
-                <div style="font-size: 1.2rem; color: #e76f51;">{data['load_total']} kWh</div>
-                <div style="font-size: 0.8rem; color: #8a8a9e;">Total Load</div>
+            <div style="background:#181825;padding:12px;border-radius:8px;text-align:center;">
+                <div style="font-size:1.2rem;color:#e76f51;">{data['load_total']} kWh</div>
+                <div style="font-size:0.8rem;color:#8a8a9e;">Total Load</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -264,32 +275,32 @@ with tab1:
     # Placeholder for a real chart
     st.markdown(
         """
-        <div style="height: 200px; background: #181825; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-            <span style="color: #8a8a9e; padding: 16px;">[Line Chart Here]</span>
+        <div style="height:200px;background:#181825;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <span style="color:#8a8a9e;padding:16px;">[Line Chart Here]</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # History tab – placeholder
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 with tab2:
     st.header("📈 Historical Data")
     st.markdown("This section will display InfluxDB historical queries.")
     st.markdown("---")
     st.markdown(
         """
-        <div style="height: 300px; background: #181825; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-            <span style="color: #8a8a9e; padding: 16px;">[7‑Day Energy Chart]</span>
+        <div style="height:300px;background:#181825;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <span style="color:#8a8a9e;padding:16px;">[7‑Day Energy Chart]</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Settings tab – placeholder
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 with tab3:
     st.header("⚙️ Application Settings")
     with st.expander("🔐 Connection Settings"):
@@ -301,13 +312,13 @@ with tab3:
     with st.expander("🔒 Security"):
         st.warning("⚠️ Ensure .env file is in .gitignore before committing to version control.")
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Footer
-# ------------------------------------------------------------------
+# --------------------------------------------------------------------------
 st.markdown("---")
 st.markdown(
     """
-    <div style="text-align: center; color: #8a8a9e; font-size: 12px;">
+    <div style="text-align:center;color:#8a8a9e;font-size:12px;">
         <strong>Fronius Energy Viewer</strong><br>
         Dark Theme • Muted Palette • Streamlit Based<br>
         Docker Deployment Ready
