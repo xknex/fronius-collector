@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fronius Energy Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Include Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <h1>⚡ Fronius Energy Dashboard</h1>
+            <p>Real-time visualization of energy flow from InfluxDB.</p>
+        </header>
+
+        <div class="summary-cards">
+            <div class="card" id="total-solar">
+                <h3>Solar Produced (kWh)</h3>
+                <p class="value">Loading...</p>
+            </div>
+            <div class="card" id="total-consumption">
+                <h3>Total Consumption (kWh)</h3>
+                <p class="value">Loading...</p>
+            </div>
+            <div class="card" id="battery-soc">
+                <h3>Battery SOC (%)</h3>
+                <p class="value">Loading...</p>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-card">
+                <h2>Power Flow Over Time (kW)</h2>
+                <canvas id="powerFlowChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h2>Energy Totals (kWh)</h2>
+                <canvas id="energyTotalChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
