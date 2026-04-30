@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fronius Energy Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #00d9ff;
+            --accent: #ff006e;
+            --warning: #ffa500;
+            --success: #00ff88;
+            --bg-dark: #0f0f1e;
+            --bg-darker: #0a0a14;
+            --bg-card: #1a1a2e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border: #2a2a3e;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-darker) 0%, var(--bg-dark) 100%);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: var(--bg-card);
+            border-bottom: 2px solid var(--primary);
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(0, 217, 255, 0.3);
+        }
+
+        .timestamp {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.2);
+            transform: translateY(-5px);
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px rgba(0, 217, 255, 0.2);
+        }
+
+        .metric-unit {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .metric-trend {
+            font-size: 12px;
+            margin-top: 10px;
+            padding: 5px 10px;
+            background: rgba(0, 255, 136, 0.1);
+            border-radius: 5px;
+            color: var(--success);
+            display: inline-block;
+        }
+
+        .metric-trend.negative {
+            background: rgba(255, 0, 110, 0.1);
+            color: var(--accent);
+        }
+
+        /* Specific metric colors */
+        .solar .metric-value { color: #ffa500; }
+        .solar .metric-trend { background: rgba(255, 165, 0, 0.1); color: #ffa500; }
+
+        .consumption .metric-value { color: #ff006e; }
+        .consumption .metric-trend { background: rgba(255, 0, 110, 0.1); color: #ff006e; }
+
+        .grid .metric-value { color: #00d9ff; }
+        .grid .metric-trend { background: rgba(0, 217, 255, 0.1); color: #00d9ff; }
+
+        .battery .metric-value { color: #00ff88; }
+        .battery .metric-trend { background: rgba(0, 255, 136, 0.1); color: #00ff88; }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .chart-title {
+            font-size: 16px;
+            color: var(--primary);
+            margin-bottom: 15px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .status-title {
+            font-size: 14px;
+            color: var(--primary);
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            color: var(--text-secondary);
+        }
+
+        .status-value {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            background: var(--border);
+            height: 8px;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success), var(--primary));
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .alert-banner {
+            background: rgba(255, 165, 0, 0.1);
+            border-left: 4px solid var(--warning);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: var(--warning);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            border-top: 1px solid var(--border);
+            margin-top: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            .metric-value {
+                font-size: 24px;
+            }
+
+            header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+        }
+
+        /* Animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span class="live-indicator"></span>Fronius Energy Dashboard</h1>
+            <div class="timestamp" id="timestamp">Loading...</div>
+        </header>
+
+        <div class="alert-banner">
+            ⚠️ System running in mock mode | Data updates every 10 seconds
+        </div>
+
+        <!-- Real-time Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card solar">
+                <div class="metric-label">☀️ Solar Production</div>
+                <div class="metric-value">6.84</div>
+                <div class="metric-unit">kW</div>
+                <div class="metric-trend">↑ 0.12 kW since last update</div>
+            </div>
+
+            <div class="metric-card consumption">
+                <div class="metric-label">⚡ Total Consumption</div>
+                <div class="metric-value">3.92</div>
+                <div class="metric-unit">kW</div>
+                <div class="metric-trend">↓ 0.08 kW since last update</div>
+            </div>
+
+            <div class="metric-card grid">
+                <div class="metric-label">🔌 Grid Feed-In</div>
+                <div class="metric-value">2.15</div>
+                <div class="metric-unit">kW</div>
+                <div class="metric-trend">↑ 0.20 kW to grid</div>
+            </div>
+
+            <div class="metric-card battery">
+                <div class="metric-label">🔋 Battery SOC</div>
+                <div class="metric-value">62.3</div>
+                <div class="metric-unit">%</div>
+                <div class="metric-trend">Charging at 1.5 kW</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">🎯 Autonomy</div>
+                <div class="metric-value">89</div>
+                <div class="metric-unit">%</div>
+                <div class="metric-trend">Excellent grid independence</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">📊 Efficiency</div>
+                <div class="metric-value">94.2</div>
+                <div class="metric-unit">%</div>
+                <div class="metric-trend">System operating optimally</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">Power Flow (Last 24h)</div>
+                <div class="chart-container">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-title">Energy Distribution Today</div>
+                <div class="chart-container">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-title">Battery SOC Trend (7 Days)</div>
+                <div class="chart-container">
+                    <canvas id="batteryChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-title">Grid Balance</div>
+                <div class="chart-container">
+                    <canvas id="gridChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Cards -->
+        <div class="status-grid">
+            <div class="status-card">
+                <div class="status-title">Today's Statistics</div>
+                <div class="status-item">
+                    <span class="status-label">Solar Production</span>
+                    <span class="status-value">47.3 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Total Consumption</span>
+                    <span class="status-value">23.8 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Export</span>
+                    <span class="status-value">18.5 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Import</span>
+                    <span class="status-value">2.1 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Battery Charged</span>
+                    <span class="status-value">12.4 kWh</span>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-title">System Health</div>
+                <div class="status-item">
+                    <span class="status-label">Inverter Temp</span>
+                    <span class="status-value">32°C</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 32%"></div>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Battery Temp</span>
+                    <span class="status-value">25°C</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 50%"></div>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">System Load</span>
+                    <span class="status-value">58%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 58%"></div>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Last Update</span>
+                    <span class="status-value">Just now</span>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-title">Monthly Summary</div>
+                <div class="status-item">
+                    <span class="status-label">Solar Production</span>
+                    <span class="status-value">1,247 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Export</span>
+                    <span class="status-value">895 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Import</span>
+                    <span class="status-value">127 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Self-Consumption</span>
+                    <span class="status-value">71.8%</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">CO₂ Avoided</span>
+                    <span class="status-value">612 kg</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Fronius GEN24 Energy Management System | Dashboard v1.0 | Mock Data Mode</p>
+        </div>
+    </div>
+
+    <script>
+        // Update timestamp
+        function updateTimestamp() {
+            const now = new Date();
+            const formatted = now.toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('timestamp').textContent = formatted;
+        }
+
+        updateTimestamp();
+        setInterval(updateTimestamp, 1000);
+
+        // Chart default options
+        Chart.defaults.color = '#a0a0a0';
+        Chart.defaults.borderColor = '#2a2a3e';
+
+        // Power Flow Chart (24-hour line chart)
+        const powerCtx = document.getElementById('powerChart').getContext('2d');
+        new Chart(powerCtx, {
+            type: 'line',
+            data: {
+                labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+                datasets: [
+                    {
+                        label: 'Solar Production',
+                        data: [0.1, 0.2, 2.5, 6.8, 5.2, 1.2, 0.1],
+                        borderColor: '#ffa500',
+                        backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ffa500'
+                    },
+                    {
+                        label: 'Consumption',
+                        data: [1.2, 0.8, 1.5, 3.2, 4.1, 3.8, 1.5],
+                        borderColor: '#ff006e',
+                        backgroundColor: 'rgba(255, 0, 110, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ff006e'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { usePointStyle: true }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Power (kW)' }
+                    }
+                }
+            }
+        });
+
+        // Energy Distribution Chart (pie chart)
+        const distributionCtx = document.getElementById('distributionChart').getContext('2d');
+        new Chart(distributionCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Battery Charging', 'Home Consumption', 'Grid Export'],
+                datasets: [{
+                    data: [25, 38, 37],
+                    backgroundColor: ['#00ff88', '#ff006e', '#00d9ff'],
+                    borderColor: '#0a0a14',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 15 }
+                    }
+                }
+            }
+        });
+
+        // Battery SOC Trend (7-day bar chart)
+        const batteryCtx = document.getElementById('batteryChart').getContext('2d');
+        new Chart(batteryCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Average SOC',
+                    data: [45, 52, 58, 65, 70, 72, 62],
+                    backgroundColor: '#00ff88',
+                    borderRadius: 5,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'x',
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        // Grid Balance Chart
+        const gridCtx = document.getElementById('gridChart').getContext('2d');
+        new Chart(gridCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Import', 'Export'],
+                datasets: [{
+                    label: 'Today (kWh)',
+                    data: [2.1, 18.5],
+                    backgroundColor: ['#ff006e', '#00d9ff'],
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'x',
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Simulate data updates every 10 seconds
+        setInterval(() => {
+            // Simulate slight metric changes
+            const solar = document.querySelectorAll('.solar .metric-value')[0];
+            solar.textContent = (Math.random() * 8).toFixed(2);
+        }, 10000);
+    </script>
+</body>
+</html>

@@ -30,6 +30,13 @@ CFG: Dict[str, Any] = {}
 LOG_FILE = "/app/logs/collector.log"
 
 # -----------------------
+# Constants
+# -----------------------
+REQUEST_TIMEOUT = 10
+MAX_RETRIES = 3
+BACKOFF_MULTIPLIER = 2.0
+
+# -----------------------
 # Banner
 # -----------------------
 
@@ -130,6 +137,15 @@ def round2(v: Optional[float]) -> Optional[float]:
     except Exception:
         return None
 
+def round1(v: Optional[float]) -> Optional[float]:
+    """Round to 1 decimal place (used for SOC)."""
+    if v is None:
+        return None
+    try:
+        return round(float(v), 1)
+    except Exception:
+        return None
+
 def kW_from_W(w: Optional[float]) -> Optional[float]:
     if w is None:
         return None
@@ -222,6 +238,31 @@ def load_config_from_env() -> Dict[str, Any]:
     vprint(f"Config: {cfg}")
     return cfg
 
+def validate_config(cfg: Dict[str, Any]) -> None:
+    """Validate critical configuration values."""
+    # Validate InfluxDB config
+    if not cfg["influxdb"]["token"] or cfg["influxdb"]["token"] == "YOUR_INFLUXDB_TOKEN":
+        err("INFLUX_TOKEN is not set or still has default value")
+        sys.exit(1)
+    if not cfg["influxdb"]["url"]:
+        err("INFLUX_URL is not set")
+        sys.exit(1)
+    if not cfg["influxdb"]["bucket"]:
+        err("INFLUX_BUCKET is not set")
+        sys.exit(1)
+    
+    # Validate Fronius config
+    if not cfg["inverter"]["host"]:
+        err("FRONIUS_INVERTER_HOST is not set")
+        sys.exit(1)
+    
+    # Validate polling interval
+    if cfg["polling"]["interval"] <= 0:
+        err(f"POLLING_INTERVAL must be positive, got {cfg['polling']['interval']}")
+        sys.exit(1)
+    
+    info("Configuration validation passed")
+
 # -----------------------
 # HTTP
 # -----------------------
@@ -229,16 +270,31 @@ def base_url() -> str:
     proto = "https" if CFG["inverter"]["use_https"] else "http"
     return f"{proto}://{CFG['inverter']['host']}"
 
-def fetch_json(path: str, retries: int = 3, backoff: float = 2.0) -> Optional[dict]:
+def fetch_json(path: str, retries: int = MAX_RETRIES, backoff: float = BACKOFF_MULTIPLIER) -> Optional[dict]:
     url = base_url() + path
     delay = 1.0
     for attempt in range(1, retries + 1):
         try:
-            r = requests.get(url, timeout=10, verify=CFG["inverter"]["verify_ssl"])
+            r = requests.get(url, timeout=REQUEST_TIMEOUT, verify=CFG["inverter"]["verify_ssl"])
             r.raise_for_status()
             return r.json()
+        except requests.exceptions.Timeout:
+            warn(f"{url} timeout (attempt {attempt}/{retries})")
+            time.sleep(delay)
+            delay *= backoff
+        except requests.exceptions.ConnectionError as e:
+            warn(f"{url} connection error (attempt {attempt}/{retries}): {e}")
+            time.sleep(delay)
+            delay *= backoff
+        except requests.exceptions.HTTPError as e:
+            warn(f"{url} HTTP error (attempt {attempt}/{retries}): {e}")
+            time.sleep(delay)
+            delay *= backoff
+        except ValueError as e:
+            err(f"{url} invalid JSON response: {e}")
+            return None
         except Exception as e:
-            warn(f"{url} failed (attempt {attempt}/{retries}): {e}")
+            err(f"{url} unexpected error (attempt {attempt}/{retries}): {e}")
             time.sleep(delay)
             delay *= backoff
     return None
@@ -270,7 +326,13 @@ def vprint_summary(fields: Dict[str, Any]):
 
     def val(key):
         v = fields.get(key, (None,))[0]
-        return "—" if v is None else f"{v:.2f}"
+        if v is None:
+            return "—"
+        # SOC is displayed with 1 decimal place, others with 2
+        if key == "Battery_SOC":
+            return f"{float(v):.1f}"
+        else:
+            return f"{float(v):.2f}"
 
     solar = fields.get("Solar_Produced_Current", (0,))[0]
     load = fields.get("Consumption_Current", (0,))[0]
@@ -302,10 +364,8 @@ def vprint_summary(fields: Dict[str, Any]):
 # -----------------------
 # Main loop
 # -----------------------
-def main():
-    influx = InfluxDBClient(url=CFG["influxdb"]["url"], token=CFG["influxdb"]["token"], org=CFG["influxdb"]["org"])
-    write_api = influx.write_api(write_options=SYNCHRONOUS)
-
+def main_loop(write_api) -> None:
+    """Main collection loop."""
     while True:
         loop_start = time.time()
         fields: Dict[str, Any] = {}
@@ -363,7 +423,7 @@ def main():
             invs = powerflow.get("Body", {}).get("Data", {}).get("Inverters", {})
             for _, inv in invs.items():
                 if "SOC" in inv:
-                    fields["Battery_SOC"] = (round2(inv["SOC"]), "%")
+                    fields["Battery_SOC"] = (round1(inv["SOC"]), "%")
                     break
 
         # --- Battery charge/discharge ---
@@ -393,6 +453,16 @@ def main():
         elapsed = time.time() - loop_start
         time.sleep(max(0.0, CFG["polling"]["interval"] - elapsed))
 
+def main() -> None:
+    """Initialize and run the collector with proper resource cleanup."""
+    influx = InfluxDBClient(url=CFG["influxdb"]["url"], token=CFG["influxdb"]["token"], org=CFG["influxdb"]["org"])
+    try:
+        write_api = influx.write_api(write_options=SYNCHRONOUS)
+        main_loop(write_api)
+    finally:
+        influx.close()
+        info("InfluxDB connection closed")
+
 # -----------------------
 # Entry
 # -----------------------
@@ -404,6 +474,7 @@ if __name__ == "__main__":
     VERBOSE = args.verbose
     USE_COLOR = not args.no_color
     CFG = load_config_from_env()
+    validate_config(CFG)
     print_banner()
     info("🚀 Fronius Collector started (env-driven config)")
     main()
