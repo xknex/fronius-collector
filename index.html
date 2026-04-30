@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fronius GEN24 Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background: #0b1120; color: #e2e8f0; }
+    .card { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; transition: transform 0.2s, box-shadow 0.2s; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+    .kpi-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; }
+    canvas { max-height: 100%; }
+    .loading { opacity: 0.6; pointer-events: none; }
+  </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen">
+
+  <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+        <span class="text-yellow-400">☀️</span> Fronius GEN24 Dashboard
+      </h1>
+      <p class="text-slate-400 text-sm mt-1">Real-time solar, battery & grid monitoring</p>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+      <button onclick="setRange(1)" id="btn-1h" class="range-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm transition">1H</button>
+      <button onclick="setRange(24)" id="btn-24h" class="range-btn active px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm transition">24H</button>
+      <button onclick="setRange(72)" id="btn-3d" class="range-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm transition">3D</button>
+      <label class="flex items-center gap-2 ml-2 cursor-pointer">
+        <input type="checkbox" id="auto-refresh" checked class="accent-blue-500">
+        <span class="text-xs text-slate-400">Auto-refresh (10s)</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8" id="kpi-container">
+    <div class="card p-5 rounded-xl shadow-lg">
+      <p class="text-slate-400 text-sm font-medium">Solar Production</p>
+      <p class="kpi-value text-yellow-400 mt-1" id="solar-current">— kW</p>
+    </div>
+    <div class="card p-5 rounded-xl shadow-lg">
+      <p class="text-slate-400 text-sm font-medium">Home Consumption</p>
+      <p class="kpi-value text-purple-400 mt-1" id="load-current">— kW</p>
+    </div>
+    <div class="card p-5 rounded-xl shadow-lg">
+      <p class="text-slate-400 text-sm font-medium">Grid Import</p>
+      <p class="kpi-value text-red-400 mt-1" id="grid-in-current">— kW</p>
+    </div>
+    <div class="card p-5 rounded-xl shadow-lg">
+      <p class="text-slate-400 text-sm font-medium">Grid Export</p>
+      <p class="kpi-value text-green-400 mt-1" id="grid-out-current">— kW</p>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+    <div class="card p-5 rounded-xl shadow-lg lg:col-span-2">
+      <h3 class="text-lg font-semibold mb-4 flex justify-between items-center">Power Flow (kW)</h3>
+      <div style="height: 280px; position: relative;">
+        <canvas id="powerChart"></canvas>
+      </div>
+    </div>
+    <div class="card p-5 rounded-xl shadow-lg">
+      <h3 class="text-lg font-semibold mb-4">Battery & Autonomy</h3>
+      <div style="height: 280px; position: relative;">
+        <canvas id="batteryChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Totals -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
+    <div class="card p-4 rounded-xl text-center">
+      <p class="text-slate-400 text-xs uppercase tracking-wider font-medium">Solar Total</p>
+      <p class="text-xl font-bold text-yellow-300 mt-1" id="solar-total">— kWh</p>
+    </div>
+    <div class="card p-4 rounded-xl text-center">
+      <p class="text-slate-400 text-xs uppercase tracking-wider font-medium">Consumption Total</p>
+      <p class="text-xl font-bold text-purple-300 mt-1" id="cons-total">— kWh</p>
+    </div>
+    <div class="card p-4 rounded-xl text-center">
+      <p class="text-slate-400 text-xs uppercase tracking-wider font-medium">Grid Import Total</p>
+      <p class="text-xl font-bold text-red-300 mt-1" id="grid-in-total">— kWh</p>
+    </div>
+    <div class="card p-4 rounded-xl text-center">
+      <p class="text-slate-400 text-xs uppercase tracking-wider font-medium">Grid Export Total</p>
+      <p class="text-xl font-bold text-green-300 mt-1" id="grid-out-total">— kWh</p>
+    </div>
+  </div>
+
+  <script>
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.borderColor = '#334155';
+    Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
+
+    let powerChart, batteryChart;
+    let currentRange = 24;
+    let refreshInterval = null;
+
+    async function fetchData() {
+      try {
+        const res = await fetch(`/api/data?range_hours=${currentRange}`);
+        if (!res.ok) throw new Error('API error');
+        const data = await res.json();
+        
+        // Update KPIs with latest values
+        const last = data.labels.length - 1;
+        document.getElementById('solar-current').textContent = `${data.solar[last].toFixed(2)} kW`;
+        document.getElementById('load-current').textContent = `${data.load[last].toFixed(2)} kW`;
+        document.getElementById('grid-in-current').textContent = `${data.grid_in[last].toFixed(2)} kW`;
+        document.getElementById('grid-out-current').textContent = `${data.grid_out[last].toFixed(2)} kW`;
+
+        // Update totals (sum of all points * 5min interval in hours)
+        const intervalHours = 5/60;
+        document.getElementById('solar-total').textContent = `${(data.solar.reduce((a,b)=>a+b,0) * intervalHours).toFixed(1)} kWh`;
+        document.getElementById('cons-total').textContent = `${(data.load.reduce((a,b)=>a+b,0) * intervalHours).toFixed(1)} kWh`;
+        document.getElementById('grid-in-total').textContent = `${(data.grid_in.reduce((a,b)=>a+b,0) * intervalHours).toFixed(1)} kWh`;
+        document.getElementById('grid-out-total').textContent = `${(data.grid_out.reduce((a,b)=>a+b,0) * intervalHours).toFixed(1)} kWh`;
+
+        // Update charts
+        powerChart.data.labels = data.labels.map(t => new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+        powerChart.data.datasets[0].data = data.solar;
+        powerChart.data.datasets[1].data = data.load;
+        powerChart.data.datasets[2].data = data.grid_in;
+        powerChart.data.datasets[3].data = data.grid_out;
+        powerChart.update();
+
+      } catch (err) {
+        console.error('Fetch failed:', err);
+        document.getElementById('solar-current').textContent = 'Error';
+      }
+    }
+
+    function initCharts() {
+      const ctxPower = document.getElementById('powerChart').getContext('2d');
+      powerChart = new Chart(ctxPower, {
+        type: 'line',
+        data: { labels: [], datasets: [
+          { label: 'Solar', data: [], borderColor: '#facc15', backgroundColor: 'rgba(250, 204, 21, 0.1)', fill: true, tension: 0.4 },
+          { label: 'Load', data: [], borderColor: '#c084fc', backgroundColor: 'rgba(192, 132, 252, 0.1)', fill: true, tension: 0.4 },
+          { label: 'Grid Import', data: [], borderColor: '#ef4444', borderDash: [5, 5], tension: 0.4 },
+          { label: 'Grid Export', data: [], borderColor: '#22c55e', borderDash: [5, 5], tension: 0.4 }
+        ]},
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, grid: { color: '#1e293b' } }, x: { grid: { display: false } } } }
+      });
+
+      const ctxBatt = document.getElementById('batteryChart').getContext('2d');
+      batteryChart = new Chart(ctxBatt, {
+        type: 'line',
+        data: { labels: [], datasets: [
+          { label: 'SOC (%)', data: [], borderColor: '#22d3ee', backgroundColor: 'rgba(34, 211, 238, 0.1)', fill: true, tension: 0.4 },
+          { label: 'Autonomy (%)', data: [], borderColor: '#a78bfa', borderDash: [3, 3], tension: 0.4 }
+        ]},
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top' } }, scales: { y: { min: 0, max: 100, grid: { color: '#1e293b' } }, x: { grid: { display: false } } } }
+      });
+    }
+
+    function setRange(hours) {
+      currentRange = hours;
+      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`btn-${hours === 1 ? '1h' : hours === 24 ? '24h' : '3d'}`).classList.add('active');
+      fetchData();
+    }
+
+    // Auto-refresh toggle
+    document.getElementById('auto-refresh').addEventListener('change', (e) => {
+      if (refreshInterval) clearInterval(refreshInterval);
+      if (e.target.checked) refreshInterval = setInterval(fetchData, 10000);
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initCharts();
+      fetchData();
+      document.getElementById('auto-refresh').dispatchEvent(new Event('change')); // Start auto-refresh
+    });
+  </script>
+</body>
+</html>

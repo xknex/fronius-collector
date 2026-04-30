@@ -2,3 +2,4 @@ requests
 PyYAML
 influxdb-client
 python-dotenv
+Flask
