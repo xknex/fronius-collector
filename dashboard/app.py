@@ -5,15 +5,22 @@ Lightweight FastAPI server to serve the dashboard and query InfluxDB data.
 """
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from influxdb_client import InfluxDBClient
+from influxdb_client.client.flux_table import FluxTable
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Fronius Dashboard")
 
-# Add CORS middleware for cross-origin requests
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,9 +29,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (CSS, JS, etc.)
+# Initialize InfluxDB client
+INFLUX_URL = os.getenv("INFLUX_URL", "http://localhost:8086")
+INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "")
+INFLUX_ORG = os.getenv("INFLUX_ORG", "org")
+INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "fronius_clean")
+
+try:
+    influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
+    query_api = influx_client.query_api()
+    logger.info(f"InfluxDB client initialized: {INFLUX_URL}")
+except Exception as e:
+    logger.error(f"Failed to initialize InfluxDB client: {e}")
+    influx_client = None
+    query_api = None
+
+# Dashboard directory
 DASHBOARD_DIR = Path(__file__).parent
-app.mount("/static", StaticFiles(directory=DASHBOARD_DIR), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -35,48 +56,202 @@ async def root():
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "ok", "service": "fronius-dashboard"}
+    if influx_client is None:
+        return {"status": "warning", "service": "fronius-dashboard", "message": "InfluxDB not connected"}
+    try:
+        influx_client.health()
+        return {"status": "ok", "service": "fronius-dashboard", "influxdb": "connected"}
+    except Exception as e:
+        return {"status": "error", "service": "fronius-dashboard", "error": str(e)}
 
 @app.get("/api/data/current")
 async def get_current_data():
-    """
-    Get current energy data from InfluxDB.
-    This is a placeholder - integrate with your InfluxDB instance.
-    """
-    # TODO: Query InfluxDB for latest data
-    return {
-        "solar_production": 6.84,
-        "consumption": 3.92,
-        "grid_feed_in": 2.15,
-        "battery_soc": 62.3,
-        "autonomy": 89,
-        "efficiency": 94.2
-    }
+    """Get current energy data from InfluxDB (latest values)."""
+    if query_api is None:
+        return {"error": "InfluxDB not connected"}
+    
+    try:
+        # Query latest values for key fields
+        query = f'''
+        from(bucket: "{INFLUX_BUCKET}")
+        |> range(start: -1h)
+        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+        |> filter(fn: (r) => r["_field"] in ["Solar_Produced_Current", "Consumption_Current", 
+                                              "Grid_FeedIn_Current", "Battery_SOC", 
+                                              "Autonomy_Percentage", "Grid_Consumption_Current"])
+        |> last()
+        '''
+        
+        result = query_api.query(query)
+        
+        # Parse results into dictionary
+        data = {}
+        for table in result:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field == "Solar_Produced_Current":
+                    data["solar_production"] = value
+                elif field == "Consumption_Current":
+                    data["consumption"] = value
+                elif field == "Grid_FeedIn_Current":
+                    data["grid_feed_in"] = value
+                elif field == "Battery_SOC":
+                    data["battery_soc"] = value
+                elif field == "Autonomy_Percentage":
+                    data["autonomy"] = value
+                elif field == "Grid_Consumption_Current":
+                    data["grid_consumption"] = value
+        
+        # Calculate efficiency (solar production / consumption if available)
+        if "solar_production" in data and "consumption" in data and data["consumption"] > 0:
+            efficiency = (data["solar_production"] / (data["solar_production"] + data.get("grid_consumption", 0))) * 100 if (data["solar_production"] + data.get("grid_consumption", 0)) > 0 else 0
+            data["efficiency"] = round(min(efficiency, 100), 1)
+        else:
+            data["efficiency"] = 0
+        
+        return data
+    except Exception as e:
+        logger.error(f"Error querying current data: {e}")
+        return {"error": str(e)}
 
 @app.get("/api/data/24h")
 async def get_24h_data():
-    """
-    Get 24-hour historical data.
-    This is a placeholder - integrate with your InfluxDB instance.
-    """
-    # TODO: Query InfluxDB for 24-hour data
-    return {
-        "labels": ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"],
-        "solar": [0.1, 0.2, 2.5, 6.8, 5.2, 1.2, 0.1],
-        "consumption": [1.2, 0.8, 1.5, 3.2, 4.1, 3.8, 1.5]
-    }
+    """Get 24-hour historical data for power flow chart."""
+    if query_api is None:
+        return {"error": "InfluxDB not connected"}
+    
+    try:
+        # Query 24-hour data with 1-hour intervals
+        query = f'''
+        from(bucket: "{INFLUX_BUCKET}")
+        |> range(start: -24h)
+        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+        |> filter(fn: (r) => r["_field"] in ["Solar_Produced_Current", "Consumption_Current"])
+        |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+        |> sort(columns: ["_time"])
+        '''
+        
+        result = query_api.query(query)
+        
+        # Parse results into time series
+        solar_data = {}
+        consumption_data = {}
+        
+        for table in result:
+            for record in table.records:
+                field = record.values.get("_field")
+                time_key = record.values.get("_time").strftime("%H:%M") if hasattr(record.values.get("_time"), "strftime") else str(record.values.get("_time"))
+                value = record.get_value()
+                
+                if field == "Solar_Produced_Current":
+                    solar_data[time_key] = value
+                elif field == "Consumption_Current":
+                    consumption_data[time_key] = value
+        
+        # Get sorted time labels from the last 24 hours
+        labels = []
+        now = datetime.now()
+        for i in range(24):
+            hour = (now - timedelta(hours=24-i)).strftime("%H:%M")
+            labels.append(hour)
+        
+        # Build arrays with data or None for missing values
+        solar = [solar_data.get(label, 0) for label in labels]
+        consumption = [consumption_data.get(label, 0) for label in labels]
+        
+        return {
+            "labels": labels,
+            "solar": solar,
+            "consumption": consumption
+        }
+    except Exception as e:
+        logger.error(f"Error querying 24h data: {e}")
+        return {"error": str(e)}
 
 @app.get("/api/data/7d")
 async def get_7d_data():
-    """
-    Get 7-day historical data.
-    This is a placeholder - integrate with your InfluxDB instance.
-    """
-    # TODO: Query InfluxDB for 7-day data
-    return {
-        "labels": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        "soc": [45, 52, 58, 65, 70, 72, 62]
-    }
+    """Get 7-day historical data for battery SOC trend."""
+    if query_api is None:
+        return {"error": "InfluxDB not connected"}
+    
+    try:
+        # Query 7-day data with daily intervals
+        query = f'''
+        from(bucket: "{INFLUX_BUCKET}")
+        |> range(start: -7d)
+        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+        |> filter(fn: (r) => r["_field"] == "Battery_SOC")
+        |> aggregateWindow(every: 1d, fn: mean, createEmpty: false)
+        |> sort(columns: ["_time"])
+        '''
+        
+        result = query_api.query(query)
+        
+        # Parse results
+        soc_by_day = {}
+        day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        
+        for table in result:
+            for record in table.records:
+                time_obj = record.values.get("_time")
+                day_name = time_obj.strftime("%a") if hasattr(time_obj, "strftime") else "Unknown"
+                value = record.get_value()
+                soc_by_day[day_name] = value
+        
+        # Build array with last 7 days in order
+        soc = []
+        now = datetime.now()
+        for i in range(6, -1, -1):
+            day = (now - timedelta(days=i))
+            day_label = day.strftime("%a")
+            soc.append(soc_by_day.get(day_label, 0))
+        
+        return {
+            "labels": day_labels,
+            "soc": soc
+        }
+    except Exception as e:
+        logger.error(f"Error querying 7d data: {e}")
+        return {"error": str(e)}
+
+@app.get("/api/data/today")
+async def get_today_stats():
+    """Get today's energy statistics."""
+    if query_api is None:
+        return {"error": "InfluxDB not connected"}
+    
+    try:
+        # Query totals from today
+        query = f'''
+        from(bucket: "{INFLUX_BUCKET}")
+        |> range(start: -24h)
+        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+        |> filter(fn: (r) => r["_field"] in ["Solar_Produced_Total", "Consumption_Total", 
+                                              "Grid_FeedIn_Total", "Grid_Consumption_Total"])
+        |> last()
+        '''
+        
+        result = query_api.query(query)
+        
+        data = {}
+        for table in result:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field == "Solar_Produced_Total":
+                    data["solar_production"] = value
+                elif field == "Consumption_Total":
+                    data["consumption"] = value
+                elif field == "Grid_FeedIn_Total":
+                    data["grid_export"] = value
+                elif field == "Grid_Consumption_Total":
+                    data["grid_import"] = value
+        
+        return data
+    except Exception as e:
+        logger.error(f"Error querying today stats: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

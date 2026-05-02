@@ -305,51 +305,51 @@
         </header>
 
         <div class="alert-banner">
-            ⚠️ System running in mock mode | Data updates every 10 seconds
+            ✓ Connected to real InfluxDB | Data updates every 30 seconds
         </div>
 
         <!-- Real-time Metrics -->
         <div class="metrics-grid">
             <div class="metric-card solar">
                 <div class="metric-label">☀️ Solar Production</div>
-                <div class="metric-value">6.84</div>
+                <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
-                <div class="metric-trend">↑ 0.12 kW since last update</div>
+                <div class="metric-trend">Loading...</div>
             </div>
 
             <div class="metric-card consumption">
                 <div class="metric-label">⚡ Total Consumption</div>
-                <div class="metric-value">3.92</div>
+                <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
-                <div class="metric-trend">↓ 0.08 kW since last update</div>
+                <div class="metric-trend">Loading...</div>
             </div>
 
             <div class="metric-card grid">
                 <div class="metric-label">🔌 Grid Feed-In</div>
-                <div class="metric-value">2.15</div>
+                <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
-                <div class="metric-trend">↑ 0.20 kW to grid</div>
+                <div class="metric-trend">Loading...</div>
             </div>
 
             <div class="metric-card battery">
                 <div class="metric-label">🔋 Battery SOC</div>
-                <div class="metric-value">62.3</div>
+                <div class="metric-value">0.0</div>
                 <div class="metric-unit">%</div>
-                <div class="metric-trend">Charging at 1.5 kW</div>
+                <div class="metric-trend">Loading...</div>
             </div>
 
             <div class="metric-card">
                 <div class="metric-label">🎯 Autonomy</div>
-                <div class="metric-value">89</div>
+                <div class="metric-value">0</div>
                 <div class="metric-unit">%</div>
-                <div class="metric-trend">Excellent grid independence</div>
+                <div class="metric-trend">Loading...</div>
             </div>
 
             <div class="metric-card">
                 <div class="metric-label">📊 Efficiency</div>
-                <div class="metric-value">94.2</div>
+                <div class="metric-value">0.0</div>
                 <div class="metric-unit">%</div>
-                <div class="metric-trend">System operating optimally</div>
+                <div class="metric-trend">Loading...</div>
             </div>
         </div>
 
@@ -386,27 +386,27 @@
 
         <!-- Status Cards -->
         <div class="status-grid">
-            <div class="status-card">
+            <div class="status-card today-stats">
                 <div class="status-title">Today's Statistics</div>
                 <div class="status-item">
                     <span class="status-label">Solar Production</span>
-                    <span class="status-value">47.3 kWh</span>
+                    <span class="status-value">0.00 kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Total Consumption</span>
-                    <span class="status-value">23.8 kWh</span>
+                    <span class="status-value">0.00 kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Grid Export</span>
-                    <span class="status-value">18.5 kWh</span>
+                    <span class="status-value">0.00 kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Grid Import</span>
-                    <span class="status-value">2.1 kWh</span>
+                    <span class="status-value">0.00 kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Battery Charged</span>
-                    <span class="status-value">12.4 kWh</span>
+                    <span class="status-value">0.00 kWh</span>
                 </div>
             </div>
 
@@ -414,24 +414,24 @@
                 <div class="status-title">System Health</div>
                 <div class="status-item">
                     <span class="status-label">Inverter Temp</span>
-                    <span class="status-value">32°C</span>
+                    <span class="status-value">--°C</span>
                 </div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: 32%"></div>
+                    <div class="progress-fill" style="width: 0%"></div>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Battery Temp</span>
-                    <span class="status-value">25°C</span>
+                    <span class="status-value">--°C</span>
                 </div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: 50%"></div>
+                    <div class="progress-fill" style="width: 0%"></div>
                 </div>
                 <div class="status-item">
                     <span class="status-label">System Load</span>
-                    <span class="status-value">58%</span>
+                    <span class="status-value">--%</span>
                 </div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: 58%"></div>
+                    <div class="progress-fill" style="width: 0%"></div>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Last Update</span>
@@ -443,33 +443,36 @@
                 <div class="status-title">Monthly Summary</div>
                 <div class="status-item">
                     <span class="status-label">Solar Production</span>
-                    <span class="status-value">1,247 kWh</span>
+                    <span class="status-value">0 kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Grid Export</span>
-                    <span class="status-value">895 kWh</span>
+                    <span class="status-value">0 kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Grid Import</span>
-                    <span class="status-value">127 kWh</span>
+                    <span class="status-value">0 kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Self-Consumption</span>
-                    <span class="status-value">71.8%</span>
+                    <span class="status-value">0%</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">CO₂ Avoided</span>
-                    <span class="status-value">612 kg</span>
+                    <span class="status-value">0 kg</span>
                 </div>
             </div>
         </div>
 
         <div class="footer">
-            <p>Fronius GEN24 Energy Management System | Dashboard v1.0 | Mock Data Mode</p>
+            <p>Fronius GEN24 Energy Management System | Dashboard v1.0 | Connected to InfluxDB</p>
         </div>
     </div>
 
     <script>
+        // Store chart instances for updates
+        let powerChart, distributionChart, socChart, gridChart;
+
         // Update timestamp
         function updateTimestamp() {
             const now = new Date();
@@ -484,145 +487,285 @@
             document.getElementById('timestamp').textContent = formatted;
         }
 
+        // Fetch current metrics from API
+        async function updateCurrentMetrics() {
+            try {
+                const response = await fetch('/api/data/current');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    return;
+                }
+
+                // Update metric cards
+                const metrics = {
+                    solar: data.solar_production || 0,
+                    consumption: data.consumption || 0,
+                    grid: data.grid_feed_in || 0,
+                    battery: data.battery_soc || 0,
+                    autonomy: data.autonomy || 0,
+                    efficiency: data.efficiency || 0
+                };
+
+                document.querySelector('.solar .metric-value').textContent = metrics.solar.toFixed(2);
+                document.querySelector('.consumption .metric-value').textContent = metrics.consumption.toFixed(2);
+                document.querySelector('.grid .metric-value').textContent = metrics.grid.toFixed(2);
+                document.querySelector('.battery .metric-value').textContent = metrics.battery.toFixed(1);
+                
+                // Get autonomy and efficiency metric cards
+                const allCards = document.querySelectorAll('.metric-card');
+                if (allCards.length >= 5) {
+                    allCards[4].querySelector('.metric-value').textContent = metrics.autonomy.toFixed(0);
+                }
+                if (allCards.length >= 6) {
+                    allCards[5].querySelector('.metric-value').textContent = metrics.efficiency.toFixed(1);
+                }
+            } catch (error) {
+                console.error('Failed to fetch current metrics:', error);
+            }
+        }
+
+        // Fetch 24-hour data and update chart
+        async function update24hChart() {
+            try {
+                const response = await fetch('/api/data/24h');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    return;
+                }
+
+                // Update power flow chart
+                if (powerChart) {
+                    powerChart.data.labels = data.labels || [];
+                    powerChart.data.datasets[0].data = data.solar || [];
+                    powerChart.data.datasets[1].data = data.consumption || [];
+                    powerChart.update('none');
+                }
+            } catch (error) {
+                console.error('Failed to fetch 24h data:', error);
+            }
+        }
+
+        // Fetch 7-day data and update chart
+        async function update7dChart() {
+            try {
+                const response = await fetch('/api/data/7d');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    return;
+                }
+
+                // Update SOC chart
+                if (socChart) {
+                    socChart.data.labels = data.labels || [];
+                    socChart.data.datasets[0].data = data.soc || [];
+                    socChart.update('none');
+                }
+            } catch (error) {
+                console.error('Failed to fetch 7d data:', error);
+            }
+        }
+
+        // Fetch today stats and update grid balance
+        async function updateTodayStats() {
+            try {
+                const response = await fetch('/api/data/today');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    return;
+                }
+
+                // Update grid balance chart
+                const gridImport = data.grid_import || 0;
+                const gridExport = data.grid_export || 0;
+                if (gridChart) {
+                    gridChart.data.datasets[0].data = [gridImport, gridExport];
+                    gridChart.update('none');
+                }
+
+                // Update status panels
+                const todayCard = document.querySelector('.today-stats');
+                if (todayCard) {
+                    const statusItems = todayCard.querySelectorAll('.status-item');
+                    if (statusItems.length > 0) {
+                        statusItems[0].querySelector('.status-value').textContent = 
+                            (data.solar_production || 0).toFixed(2) + ' kWh';
+                    }
+                    if (statusItems.length > 1) {
+                        statusItems[1].querySelector('.status-value').textContent = 
+                            (data.consumption || 0).toFixed(2) + ' kWh';
+                    }
+                    if (statusItems.length > 2) {
+                        statusItems[2].querySelector('.status-value').textContent = 
+                            gridExport.toFixed(2) + ' kWh';
+                    }
+                    if (statusItems.length > 3) {
+                        statusItems[3].querySelector('.status-value').textContent = 
+                            gridImport.toFixed(2) + ' kWh';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch today stats:', error);
+            }
+        }
+
+        // Initialize charts with data
+        async function initCharts() {
+            // Chart default options
+            Chart.defaults.color = '#a0a0a0';
+            Chart.defaults.borderColor = '#2a2a3e';
+
+            // Power Flow Chart (24-hour line chart)
+            const powerCtx = document.getElementById('powerChart').getContext('2d');
+            powerChart = new Chart(powerCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Solar Production',
+                            data: [],
+                            borderColor: '#ffa500',
+                            backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#ffa500'
+                        },
+                        {
+                            label: 'Consumption',
+                            data: [],
+                            borderColor: '#ff006e',
+                            backgroundColor: 'rgba(255, 0, 110, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#ff006e'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: { usePointStyle: true }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Power (kW)' }
+                        }
+                    }
+                }
+            });
+
+            // Energy Distribution Chart (pie chart)
+            const distributionCtx = document.getElementById('distributionChart').getContext('2d');
+            distributionChart = new Chart(distributionCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Battery Charging', 'Home Consumption', 'Grid Export'],
+                    datasets: [{
+                        data: [33, 33, 34],
+                        backgroundColor: ['#00ff88', '#ff006e', '#00d9ff'],
+                        borderColor: '#0a0a14',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { usePointStyle: true }
+                        }
+                    }
+                }
+            });
+
+            // Battery SOC Trend Chart (7-day bar chart)
+            const socCtx = document.getElementById('batteryChart').getContext('2d');
+            socChart = new Chart(socCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [{
+                        label: 'Average SOC',
+                        data: [],
+                        backgroundColor: '#00ff88',
+                        borderRadius: 5,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'x',
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+
+            // Grid Balance Chart
+            const gridCtx = document.getElementById('gridChart').getContext('2d');
+            gridChart = new Chart(gridCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Import', 'Export'],
+                    datasets: [{
+                        label: 'Today (kWh)',
+                        data: [0, 0],
+                        backgroundColor: ['#ff006e', '#00d9ff'],
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'x',
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Load initial data
+            updateTimestamp();
+            await updateCurrentMetrics();
+            await update24hChart();
+            await update7dChart();
+            await updateTodayStats();
+        }
+
+        // Initialize on page load
         updateTimestamp();
         setInterval(updateTimestamp, 1000);
 
-        // Chart default options
-        Chart.defaults.color = '#a0a0a0';
-        Chart.defaults.borderColor = '#2a2a3e';
-
-        // Power Flow Chart (24-hour line chart)
-        const powerCtx = document.getElementById('powerChart').getContext('2d');
-        new Chart(powerCtx, {
-            type: 'line',
-            data: {
-                labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
-                datasets: [
-                    {
-                        label: 'Solar Production',
-                        data: [0.1, 0.2, 2.5, 6.8, 5.2, 1.2, 0.1],
-                        borderColor: '#ffa500',
-                        backgroundColor: 'rgba(255, 165, 0, 0.1)',
-                        tension: 0.4,
-                        fill: true,
-                        borderWidth: 2,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#ffa500'
-                    },
-                    {
-                        label: 'Consumption',
-                        data: [1.2, 0.8, 1.5, 3.2, 4.1, 3.8, 1.5],
-                        borderColor: '#ff006e',
-                        backgroundColor: 'rgba(255, 0, 110, 0.1)',
-                        tension: 0.4,
-                        fill: true,
-                        borderWidth: 2,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#ff006e'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true,
-                        labels: { usePointStyle: true }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: { display: true, text: 'Power (kW)' }
-                    }
-                }
-            }
-        });
-
-        // Energy Distribution Chart (pie chart)
-        const distributionCtx = document.getElementById('distributionChart').getContext('2d');
-        new Chart(distributionCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Battery Charging', 'Home Consumption', 'Grid Export'],
-                datasets: [{
-                    data: [25, 38, 37],
-                    backgroundColor: ['#00ff88', '#ff006e', '#00d9ff'],
-                    borderColor: '#0a0a14',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { padding: 15 }
-                    }
-                }
-            }
-        });
-
-        // Battery SOC Trend (7-day bar chart)
-        const batteryCtx = document.getElementById('batteryChart').getContext('2d');
-        new Chart(batteryCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                datasets: [{
-                    label: 'Average SOC',
-                    data: [45, 52, 58, 65, 70, 72, 62],
-                    backgroundColor: '#00ff88',
-                    borderRadius: 5,
-                    borderSkipped: false
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'x',
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100
-                    }
-                }
-            }
-        });
-
-        // Grid Balance Chart
-        const gridCtx = document.getElementById('gridChart').getContext('2d');
-        new Chart(gridCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Import', 'Export'],
-                datasets: [{
-                    label: 'Today (kWh)',
-                    data: [2.1, 18.5],
-                    backgroundColor: ['#ff006e', '#00d9ff'],
-                    borderRadius: 5
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'x',
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-
-        // Simulate data updates every 10 seconds
-        setInterval(() => {
-            // Simulate slight metric changes
-            const solar = document.querySelectorAll('.solar .metric-value')[0];
-            solar.textContent = (Math.random() * 8).toFixed(2);
-        }, 10000);
+        // Initialize charts and set up data refresh
+        initCharts();
+        setInterval(updateCurrentMetrics, 30000);      // Update metrics every 30 seconds
+        setInterval(update24hChart, 60000);            // Update 24h chart every 60 seconds
+        setInterval(update7dChart, 300000);            // Update 7d chart every 5 minutes
+        setInterval(updateTodayStats, 120000);         // Update today stats every 2 minutes
     </script>
 </body>
 </html>
