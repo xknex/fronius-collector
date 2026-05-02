@@ -10,21 +10,16 @@ WORKDIR /app
 # Install system dependencies for running both collector and dashboard
 RUN apk add --no-cache tini
 
-# Copy collector requirements
+# Copy collector requirements and install
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy dashboard requirements
-COPY dashboard/requirements.txt dashboard/
-
-# Install all Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r dashboard/requirements.txt
+# Copy dashboard requirements and install
+COPY dashboard/ dashboard/
+RUN pip install --no-cache-dir -r dashboard/requirements.txt
 
 # Copy collector script
 COPY collector_docker.py .
-
-# Copy dashboard application
-COPY dashboard/ dashboard/
 
 # Create log directory
 RUN mkdir -p /app/logs
