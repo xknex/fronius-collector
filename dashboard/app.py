@@ -222,15 +222,13 @@ async def get_today_stats():
         return {"error": "InfluxDB not connected"}
     
     try:
-        # Query totals from today
-        query = f'''
-        from(bucket: "{INFLUX_BUCKET}")
-        |> range(start: -24h)
-        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-        |> filter(fn: (r) => r["_field"] in ["Solar_Produced_Total", "Consumption_Total", 
-                                              "Grid_FeedIn_Total", "Grid_Consumption_Total"])
-        |> last()
-        '''
+        # Query totals from today - use multiple filters instead of array
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Total" or r["_field"] == "Consumption_Total" or r["_field"] == "Grid_FeedIn_Total" or r["_field"] == "Grid_Consumption_Total")
+  |> last()
+'''
         
         result = query_api.query(query)
         
