@@ -305,7 +305,7 @@
         </header>
 
         <div class="alert-banner">
-            ✓ Connected to real InfluxDB | Data updates every 30 seconds
+            ✓ Connected to InfluxDB
         </div>
 
         <!-- Real-time Metrics -->
@@ -345,12 +345,6 @@
                 <div class="metric-trend">Loading...</div>
             </div>
 
-            <div class="metric-card">
-                <div class="metric-label">📊 Efficiency</div>
-                <div class="metric-value">0.0</div>
-                <div class="metric-unit">%</div>
-                <div class="metric-trend">Loading...</div>
-            </div>
         </div>
 
         <!-- Charts -->
@@ -504,22 +498,52 @@
                     consumption: data.consumption || 0,
                     grid: data.grid_feed_in || 0,
                     battery: data.battery_soc || 0,
-                    autonomy: data.autonomy || 0,
-                    efficiency: data.efficiency || 0
+                    autonomy: data.autonomy || 0
                 };
 
+                // Update Solar Production
                 document.querySelector('.solar .metric-value').textContent = metrics.solar.toFixed(2);
+                const solarTrend = document.querySelector('.solar .metric-trend');
+                solarTrend.textContent = metrics.solar > 0 ? '⬆ Active' : '⬇ Idle';
+
+                // Update Consumption
                 document.querySelector('.consumption .metric-value').textContent = metrics.consumption.toFixed(2);
+                const consumptionTrend = document.querySelector('.consumption .metric-trend');
+                consumptionTrend.textContent = metrics.consumption > 0 ? '⬆ Active' : '⬇ Idle';
+
+                // Update Grid Feed-In
                 document.querySelector('.grid .metric-value').textContent = metrics.grid.toFixed(2);
+                const gridTrend = document.querySelector('.grid .metric-trend');
+                gridTrend.textContent = metrics.grid > 0 ? '⬆ Exporting' : '⬇ Importing';
+
+                // Update Battery SOC
                 document.querySelector('.battery .metric-value').textContent = metrics.battery.toFixed(1);
-                
-                // Get autonomy and efficiency metric cards
+                const batteryTrend = document.querySelector('.battery .metric-trend');
+                if (metrics.battery > 80) {
+                    batteryTrend.textContent = '✓ Well charged';
+                } else if (metrics.battery > 50) {
+                    batteryTrend.textContent = '⬆ Charging';
+                } else if (metrics.battery > 20) {
+                    batteryTrend.textContent = '⬇ Discharging';
+                } else {
+                    batteryTrend.textContent = '⚠ Low charge';
+                }
+
+                // Update Autonomy
                 const allCards = document.querySelectorAll('.metric-card');
                 if (allCards.length >= 5) {
-                    allCards[4].querySelector('.metric-value').textContent = metrics.autonomy.toFixed(0);
-                }
-                if (allCards.length >= 6) {
-                    allCards[5].querySelector('.metric-value').textContent = metrics.efficiency.toFixed(1);
+                    const autonomyCard = allCards[4];
+                    autonomyCard.querySelector('.metric-value').textContent = metrics.autonomy.toFixed(0);
+                    const autonomyTrend = autonomyCard.querySelector('.metric-trend');
+                    if (metrics.autonomy > 80) {
+                        autonomyTrend.textContent = '✓ Excellent';
+                    } else if (metrics.autonomy > 60) {
+                        autonomyTrend.textContent = '✓ Good';
+                    } else if (metrics.autonomy > 40) {
+                        autonomyTrend.textContent = '→ Fair';
+                    } else {
+                        autonomyTrend.textContent = '⚠ Limited';
+                    }
                 }
             } catch (error) {
                 console.error('Failed to fetch current metrics:', error);
