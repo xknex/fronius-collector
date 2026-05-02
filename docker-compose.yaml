@@ -2,8 +2,8 @@ services:
   collector:
     env_file:
       - .env
-    image: fronius-collector
-    container_name: fronius-collector
+    image: fronius-collector-beta
+    container_name: fronius-collector-beta
     volumes:
       - ./logs:/app/logs
     # Healthcheck ensures container is alive and responding
@@ -17,7 +17,7 @@ services:
       - influxdb2
 
   dashboard:
-    image: fronius-collector
+    image: fronius-collector-beta
     container_name: fronius-dashboard
     ports:
       - "8080:8080"
