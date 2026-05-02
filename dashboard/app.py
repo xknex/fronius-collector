@@ -72,15 +72,12 @@ async def get_current_data():
     
     try:
         # Query latest values for key fields
-        query = f'''
-        from(bucket: "{INFLUX_BUCKET}")
-        |> range(start: -1h)
-        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-        |> filter(fn: (r) => r["_field"] in ["Solar_Produced_Current", "Consumption_Current", 
-                                              "Grid_FeedIn_Current", "Battery_SOC", 
-                                              "Autonomy_Percentage", "Grid_Consumption_Current"])
-        |> last()
-        '''
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Grid_FeedIn_Current" or r["_field"] == "Battery_SOC" or r["_field"] == "Autonomy_Percentage" or r["_field"] == "Grid_Consumption_Current")
+  |> last()
+'''
         
         result = query_api.query(query)
         
@@ -123,14 +120,13 @@ async def get_24h_data():
     
     try:
         # Query 24-hour data with 1-hour intervals
-        query = f'''
-        from(bucket: "{INFLUX_BUCKET}")
-        |> range(start: -24h)
-        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-        |> filter(fn: (r) => r["_field"] in ["Solar_Produced_Current", "Consumption_Current"])
-        |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
-        |> sort(columns: ["_time"])
-        '''
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current")
+  |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+  |> sort(columns: ["_time"])
+'''
         
         result = query_api.query(query)
         
