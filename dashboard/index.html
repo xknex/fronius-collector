@@ -785,11 +785,14 @@
         setInterval(updateTimestamp, 1000);
 
         // Initialize charts and set up data refresh
-        initCharts();
-        setInterval(updateCurrentMetrics, 30000);      // Update metrics every 30 seconds
-        setInterval(update24hChart, 60000);            // Update 24h chart every 60 seconds
-        setInterval(update7dChart, 300000);            // Update 7d chart every 5 minutes
-        setInterval(updateTodayStats, 120000);         // Update today stats every 2 minutes
+        (async function() {
+            await initCharts();
+            // Only set intervals after charts are fully initialized
+            setInterval(updateCurrentMetrics, 30000);      // Update metrics every 30 seconds
+            setInterval(update24hChart, 60000);            // Update 24h chart every 60 seconds
+            setInterval(update7dChart, 300000);            // Update 7d chart every 5 minutes
+            setInterval(updateTodayStats, 120000);         // Update today stats every 2 minutes
+        })();
     </script>
 </body>
 </html>
