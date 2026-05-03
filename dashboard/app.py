@@ -172,58 +172,67 @@ async def get_7d_data():
         return {"error": "InfluxDB not connected"}
     
     try:
-        # Query grid consumption (import) and feed-in (export) for last 7 days
+        # Query grid consumption and feed-in totals for last 8 days
+        # (need 8 days to calculate 7 days of daily deltas)
         import_query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: -7d)
+  |> range(start: -8d)
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total")
   |> aggregateWindow(every: 1d, fn: last, createEmpty: false)
+  |> sort(columns: ["_time"])
 '''
         
         export_query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: -7d)
+  |> range(start: -8d)
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "Grid_FeedIn_Total")
   |> aggregateWindow(every: 1d, fn: last, createEmpty: false)
+  |> sort(columns: ["_time"])
 '''
         
         import_result = query_api.query(import_query)
         export_result = query_api.query(export_query)
         
-        # Parse results by day
-        import_by_day = {}
-        export_by_day = {}
-        day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        # Parse results - collect all daily values in order
+        import_values = []
+        export_values = []
         
         for table in import_result:
             for record in table.records:
-                time_obj = record.values.get("_time")
-                day_name = time_obj.strftime("%a") if hasattr(time_obj, "strftime") else "Unknown"
                 value = record.get_value()
-                import_by_day[day_name] = value or 0
+                import_values.append(value or 0)
         
         for table in export_result:
             for record in table.records:
-                time_obj = record.values.get("_time")
-                day_name = time_obj.strftime("%a") if hasattr(time_obj, "strftime") else "Unknown"
                 value = record.get_value()
-                export_by_day[day_name] = value or 0
+                export_values.append(value or 0)
         
-        # Build arrays with last 7 days and calculate costs/income
-        import_costs = []
-        export_income = []
-        now = datetime.now()
-        for i in range(6, -1, -1):
-            day = (now - timedelta(days=i))
-            day_label = day.strftime("%a")
-            
-            # Get daily totals and calculate economics
-            # Cost: 0.3€ per kWh imported, Income: 0.06€ per kWh exported
-            import_val = import_by_day.get(day_label, 0)
-            export_val = export_by_day.get(day_label, 0)
-            
-            import_costs.append(round(import_val * 0.3, 2))
-            export_income.append(round(export_val * 0.06, 2))
+        # Calculate daily deltas (consumption/export for each day)
+        # We have 8 days of data, so we calculate 7 daily deltas
+        import_daily = []
+        export_daily = []
+        day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        
+        for i in range(1, len(import_values)):
+            daily_import = max(0, (import_values[i] - import_values[i-1]))
+            daily_export = max(0, (export_values[i] - export_values[i-1]))
+            import_daily.append(daily_import)
+            export_daily.append(daily_export)
+        
+        # Keep only last 7 days and calculate costs
+        import_daily = import_daily[-7:] if len(import_daily) >= 7 else import_daily
+        export_daily = export_daily[-7:] if len(export_daily) >= 7 else export_daily
+        
+        # Pad with zeros if we have fewer than 7 days
+        while len(import_daily) < 7:
+            import_daily.insert(0, 0)
+        while len(export_daily) < 7:
+            export_daily.insert(0, 0)
+        
+        # Calculate costs and income
+        # Cost: 0.3€ per kWh imported, Income: 0.06€ per kWh exported
+        import_costs = [round(val * 0.3, 2) for val in import_daily]
+        export_income = [round(val * 0.06, 2) for val in export_daily]
         
         return {
             "labels": day_labels,
