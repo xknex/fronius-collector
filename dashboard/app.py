@@ -172,40 +172,63 @@ async def get_7d_data():
         return {"error": "InfluxDB not connected"}
     
     try:
-        # Query 7-day data with daily intervals
-        query = f'''
-        from(bucket: "{INFLUX_BUCKET}")
-        |> range(start: -7d)
-        |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-        |> filter(fn: (r) => r["_field"] == "Battery_SOC")
-        |> aggregateWindow(every: 1d, fn: mean, createEmpty: false)
-        |> sort(columns: ["_time"])
-        '''
+        # Query grid consumption (import) and feed-in (export) for last 7 days
+        import_query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -7d)
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total")
+  |> aggregateWindow(every: 1d, fn: last, createEmpty: false)
+'''
         
-        result = query_api.query(query)
+        export_query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -7d)
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Grid_FeedIn_Total")
+  |> aggregateWindow(every: 1d, fn: last, createEmpty: false)
+'''
         
-        # Parse results
-        soc_by_day = {}
+        import_result = query_api.query(import_query)
+        export_result = query_api.query(export_query)
+        
+        # Parse results by day
+        import_by_day = {}
+        export_by_day = {}
         day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         
-        for table in result:
+        for table in import_result:
             for record in table.records:
                 time_obj = record.values.get("_time")
                 day_name = time_obj.strftime("%a") if hasattr(time_obj, "strftime") else "Unknown"
                 value = record.get_value()
-                soc_by_day[day_name] = value
+                import_by_day[day_name] = value or 0
         
-        # Build array with last 7 days in order
-        soc = []
+        for table in export_result:
+            for record in table.records:
+                time_obj = record.values.get("_time")
+                day_name = time_obj.strftime("%a") if hasattr(time_obj, "strftime") else "Unknown"
+                value = record.get_value()
+                export_by_day[day_name] = value or 0
+        
+        # Build arrays with last 7 days and calculate costs/income
+        import_costs = []
+        export_income = []
         now = datetime.now()
         for i in range(6, -1, -1):
             day = (now - timedelta(days=i))
             day_label = day.strftime("%a")
-            soc.append(soc_by_day.get(day_label, 0))
+            
+            # Get daily totals and calculate economics
+            # Cost: 0.3€ per kWh imported, Income: 0.06€ per kWh exported
+            import_val = import_by_day.get(day_label, 0)
+            export_val = export_by_day.get(day_label, 0)
+            
+            import_costs.append(round(import_val * 0.3, 2))
+            export_income.append(round(export_val * 0.06, 2))
         
         return {
             "labels": day_labels,
-            "soc": soc
+            "import_costs": import_costs,
+            "export_income": export_income
         }
     except Exception as e:
         logger.error(f"Error querying 7d data: {e}")

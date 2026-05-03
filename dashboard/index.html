@@ -364,9 +364,9 @@
             </div>
 
             <div class="chart-card">
-                <div class="chart-title">Battery SOC Trend (7 Days)</div>
+                <div class="chart-title">Grid Economics (7 Days)</div>
                 <div class="chart-container">
-                    <canvas id="batteryChart"></canvas>
+                    <canvas id="economicsChart"></canvas>
                 </div>
             </div>
 
@@ -465,7 +465,7 @@
 
     <script>
         // Store chart instances for updates
-        let powerChart, distributionChart, socChart, gridChart;
+        let powerChart, distributionChart, economicsChart, gridChart;
 
         // Update timestamp
         function updateTimestamp() {
@@ -584,11 +584,12 @@
                     return;
                 }
 
-                // Update SOC chart
-                if (socChart) {
-                    socChart.data.labels = data.labels || [];
-                    socChart.data.datasets[0].data = data.soc || [];
-                    socChart.update('none');
+                // Update economics chart
+                if (economicsChart) {
+                    economicsChart.data.labels = data.labels || [];
+                    economicsChart.data.datasets[0].data = data.import_costs || [];
+                    economicsChart.data.datasets[1].data = data.export_income || [];
+                    economicsChart.update('none');
                 }
             } catch (error) {
                 console.error('Failed to fetch 7d data:', error);
@@ -720,19 +721,26 @@
                 }
             });
 
-            // Battery SOC Trend Chart (7-day bar chart)
-            const socCtx = document.getElementById('batteryChart').getContext('2d');
-            socChart = new Chart(socCtx, {
+            // Grid Economics Chart (7-day bar chart showing import costs and export income)
+            const economicsCtx = document.getElementById('economicsChart').getContext('2d');
+            economicsChart = new Chart(economicsCtx, {
                 type: 'bar',
                 data: {
                     labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                    datasets: [{
-                        label: 'Average SOC',
-                        data: [],
-                        backgroundColor: '#00ff88',
-                        borderRadius: 5,
-                        borderSkipped: false
-                    }]
+                    datasets: [
+                        {
+                            label: 'Import Cost (€)',
+                            data: [],
+                            backgroundColor: '#ff006e',
+                            borderRadius: 5
+                        },
+                        {
+                            label: 'Export Income (€)',
+                            data: [],
+                            backgroundColor: '#00ff88',
+                            borderRadius: 5
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -741,7 +749,13 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            max: 100
+                            title: { display: true, text: 'Amount (€)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
                         }
                     }
                 }
