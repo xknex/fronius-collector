@@ -33,7 +33,7 @@ VOLUME ["/app/logs"]
 EXPOSE 8080
 
 # Use tini to handle signals properly
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Default: run collector in verbose mode
 # To run dashboard: docker run -p 8080:8080 fronius-collector python dashboard/app.py
