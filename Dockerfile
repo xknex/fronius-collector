@@ -1,5 +1,5 @@
-# Use a small official Python image
-FROM python:3.13-alpine
+# Use a slim Debian-based Python image (has system libs needed for psutil)
+FROM python:3.13-slim
 
 # Avoid buffering (useful for logs)
 ENV PYTHONUNBUFFERED=1
@@ -7,9 +7,10 @@ ENV PYTHONUNBUFFERED=1
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (including build tools for psutil compilation)
-RUN apk add --no-cache tini && \
-    apk add --no-cache --virtual .build-deps gcc python3-dev musl-dev
+# Install system dependencies (tini for signal handling, curl for health checks)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy collector requirements and install
 COPY requirements.txt .
@@ -17,8 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy dashboard requirements and install
 COPY dashboard/ dashboard/
-RUN pip install --no-cache-dir -r dashboard/requirements.txt && \
-    apk del --no-cache .build-deps
+RUN pip install --no-cache-dir -r dashboard/requirements.txt
 
 # Copy collector script
 COPY collector_docker.py .
