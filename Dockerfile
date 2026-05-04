@@ -7,8 +7,9 @@ ENV PYTHONUNBUFFERED=1
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for running both collector and dashboard
-RUN apk add --no-cache tini
+# Install system dependencies (including build tools for psutil compilation)
+RUN apk add --no-cache tini && \
+    apk add --no-cache --virtual .build-deps gcc python3-dev musl-dev
 
 # Copy collector requirements and install
 COPY requirements.txt .
@@ -16,7 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy dashboard requirements and install
 COPY dashboard/ dashboard/
-RUN pip install --no-cache-dir -r dashboard/requirements.txt
+RUN pip install --no-cache-dir -r dashboard/requirements.txt && \
+    apk del --no-cache .build-deps
 
 # Copy collector script
 COPY collector_docker.py .
