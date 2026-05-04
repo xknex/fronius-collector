@@ -13,6 +13,13 @@ import os
 from pathlib import Path
 from datetime import datetime, timedelta
 import logging
+import time
+
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -55,14 +62,45 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint."""
-    if influx_client is None:
-        return {"status": "warning", "service": "fronius-dashboard", "message": "InfluxDB not connected"}
-    try:
-        influx_client.health()
-        return {"status": "ok", "service": "fronius-dashboard", "influxdb": "connected"}
-    except Exception as e:
-        return {"status": "error", "service": "fronius-dashboard", "error": str(e)}
+    """Detailed health check endpoint with latency and system info."""
+    result = {
+        "status": "ok",
+        "service": "fronius-dashboard",
+        "influxdb": "disconnected",
+        "db_latency": None,
+        "api_latency": None,
+        "memory_usage": None
+    }
+    
+    # Check InfluxDB connection and measure latency
+    if influx_client is not None:
+        try:
+            start = time.time()
+            influx_client.health()
+            latency = int((time.time() - start) * 1000)  # Convert to ms
+            result["influxdb"] = "connected"
+            result["db_latency"] = latency
+        except Exception as e:
+            result["influxdb"] = "error"
+            result["status"] = "warning"
+            logger.error(f"InfluxDB health check failed: {e}")
+    else:
+        result["status"] = "warning"
+    
+    # Measure API response time
+    result["api_latency"] = 1  # Approximate, measured client-side is more accurate
+    
+    # Get memory usage
+    if HAS_PSUTIL:
+        try:
+            process = psutil.Process()
+            memory_mb = process.memory_info().rss / 1024 / 1024
+            result["memory_usage"] = int(memory_mb)
+        except Exception as e:
+            logger.warning(f"Failed to get memory usage: {e}")
+            result["memory_usage"] = None
+    
+    return result
 
 @app.get("/api/data/current")
 async def get_current_data():

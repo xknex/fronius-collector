@@ -49,6 +49,149 @@
             align-items: center;
         }
 
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 15px;
+            background: rgba(0, 217, 255, 0.1);
+            border: 1px solid var(--primary);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+
+        .status-indicator:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.2);
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.warning {
+            background: var(--warning);
+        }
+
+        .status-dot.error {
+            background: var(--accent);
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--primary);
+        }
+
+        .status-item-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .status-item-row:last-child {
+            border-bottom: none;
+        }
+
+        .status-item-label {
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-item-value {
+            color: var(--primary);
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-badge.ok {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success);
+        }
+
+        .status-badge.warning {
+            background: rgba(255, 165, 0, 0.2);
+            color: var(--warning);
+        }
+
+        .status-badge.error {
+            background: rgba(255, 0, 110, 0.2);
+            color: var(--accent);
+        }
+
         h1 {
             font-size: 28px;
             color: var(--primary);
@@ -300,12 +443,27 @@
 <body>
     <div class="container">
         <header>
-            <h1><span class="live-indicator"></span>Fronius Energy Dashboard</h1>
+            <div class="header-left">
+                <h1><span class="live-indicator"></span>Fronius Energy Dashboard</h1>
+                <div class="status-indicator" id="statusIndicator" title="Click for system status">
+                    <span class="status-dot"></span>
+                    <span>System Status</span>
+                </div>
+            </div>
             <div class="timestamp" id="timestamp">Loading...</div>
         </header>
 
-        <div class="alert-banner">
-            ✓ Connected to InfluxDB
+        <!-- Status Modal -->
+        <div class="modal" id="statusModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-title">System Status</div>
+                    <button class="modal-close" id="modalClose">&times;</button>
+                </div>
+                <div id="statusDetails">
+                    <p style="color: var(--text-secondary); text-align: center;">Loading...</p>
+                </div>
+            </div>
         </div>
 
         <!-- Real-time Metrics -->
@@ -466,6 +624,105 @@
     <script>
         // Store chart instances for updates
         let powerChart, distributionChart, economicsChart, gridChart;
+        let startTime = Date.now();
+        let lastHealthCheck = {};
+
+        // Modal management
+        const statusModal = document.getElementById('statusModal');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const modalClose = document.getElementById('modalClose');
+
+        statusIndicator.addEventListener('click', showStatusModal);
+        modalClose.addEventListener('click', hideStatusModal);
+        statusModal.addEventListener('click', (e) => {
+            if (e.target === statusModal) hideStatusModal();
+        });
+
+        function hideStatusModal() {
+            statusModal.classList.remove('active');
+        }
+
+        async function showStatusModal() {
+            statusModal.classList.add('active');
+            await updateStatusDetails();
+        }
+
+        // Fetch and display system status
+        async function updateStatusDetails() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                lastHealthCheck = data;
+                
+                const statusDetails = document.getElementById('statusDetails');
+                const uptime = Math.floor((Date.now() - startTime) / 1000);
+                const uptimeStr = formatUptime(uptime);
+                
+                // Determine status badges
+                const dbStatus = data.influxdb === 'connected' ? 'ok' : 'error';
+                const apiStatus = response.ok ? 'ok' : 'error';
+                
+                let html = `
+                    <div class="status-item-row">
+                        <span class="status-item-label">📡 Database Connection</span>
+                        <span class="status-item-value">
+                            <span class="status-badge ${dbStatus}">${data.influxdb || 'unknown'}</span>
+                        </span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">⏱️ Database Latency</span>
+                        <span class="status-item-value">${data.db_latency || '--'}ms</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">🖥️ API Status</span>
+                        <span class="status-item-value">
+                            <span class="status-badge ${apiStatus}">operational</span>
+                        </span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">⏱️ API Latency</span>
+                        <span class="status-item-value">${data.api_latency || '--'}ms</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">⏰ System Uptime</span>
+                        <span class="status-item-value">${uptimeStr}</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">💾 Memory Usage</span>
+                        <span class="status-item-value">${data.memory_usage || '--'}MB</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">📊 Last Updated</span>
+                        <span class="status-item-value">${new Date().toLocaleTimeString()}</span>
+                    </div>
+                `;
+                
+                statusDetails.innerHTML = html;
+                updateStatusDot(dbStatus);
+            } catch (error) {
+                console.error('Failed to fetch status:', error);
+                document.getElementById('statusDetails').innerHTML = 
+                    '<p style="color: var(--accent);">Failed to load status information</p>';
+                updateStatusDot('error');
+            }
+        }
+
+        function updateStatusDot(status) {
+            const dot = document.querySelector('.status-dot');
+            dot.classList.remove('warning', 'error');
+            if (status === 'warning') dot.classList.add('warning');
+            if (status === 'error') dot.classList.add('error');
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
 
         // Update timestamp
         function updateTimestamp() {
