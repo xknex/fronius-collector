@@ -655,7 +655,7 @@
                 lastHealthCheck = data;
                 
                 const statusDetails = document.getElementById('statusDetails');
-                const uptime = Math.floor((Date.now() - startTime) / 1000);
+                const uptime = data.uptime || 0;
                 const uptimeStr = formatUptime(uptime);
                 
                 // Determine status badges

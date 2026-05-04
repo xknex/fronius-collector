@@ -25,6 +25,9 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Track app startup time for uptime calculation
+APP_START_TIME = time.time()
+
 app = FastAPI(title="Fronius Dashboard")
 
 # Add CORS middleware
@@ -89,6 +92,10 @@ async def health_check():
     
     # Measure API response time
     result["api_latency"] = 1  # Approximate, measured client-side is more accurate
+    
+    # Calculate uptime
+    uptime_seconds = int(time.time() - APP_START_TIME)
+    result["uptime"] = uptime_seconds
     
     # Get memory usage
     if HAS_PSUTIL:
