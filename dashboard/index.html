@@ -555,7 +555,14 @@
             </div>
 
             <div class="chart-card">
-                <div class="chart-title">Grid Economics (7 Days)</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div class="chart-title">Grid Economics</div>
+                    <div class="timeframe-selector">
+                        <button class="timeframe-btn active" data-range="7d">7D</button>
+                        <button class="timeframe-btn" data-range="1month">1M</button>
+                        <button class="timeframe-btn" data-range="1year">1Y</button>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="economicsChart"></canvas>
                 </div>
@@ -900,9 +907,14 @@
         }
 
         // Fetch 7-day data and update chart
-        async function update7dChart() {
+        // Track current economics time range
+        let currentEconomicsRange = "7d";
+
+        // Fetch economics data and update chart with specified range
+        async function updateEconomicsChart(range = "7d") {
             try {
-                const response = await fetch('/api/data/7d');
+                currentEconomicsRange = range;
+                const response = await fetch(`/api/data/economics?range=${range}`);
                 const data = await response.json();
                 
                 if (data.error) {
@@ -917,9 +929,25 @@
                     economicsChart.data.datasets[1].data = data.export_income || [];
                     economicsChart.update('none');
                 }
+                
+                // Update active button state for economics chart
+                document.querySelectorAll('[data-range="7d"], [data-range="1month"], [data-range="1year"]').forEach(btn => {
+                    const isEconomicsButton = btn.closest('.chart-card')?.querySelector('.chart-title')?.textContent.includes('Grid Economics');
+                    if (isEconomicsButton) {
+                        btn.classList.remove('active');
+                        if (btn.dataset.range === range) {
+                            btn.classList.add('active');
+                        }
+                    }
+                });
             } catch (error) {
-                console.error('Failed to fetch 7d data:', error);
+                console.error('Failed to fetch economics data:', error);
             }
+        }
+
+        // Legacy function for backward compatibility
+        async function update7dChart() {
+            await updateEconomicsChart(currentEconomicsRange);
         }
 
         // Fetch today stats and update grid balance
@@ -1052,12 +1080,12 @@
                 }
             });
 
-            // Grid Economics Chart (7-day bar chart showing import costs and export income)
+            // Grid Economics Chart (interactive bar chart showing import costs and export income)
             const economicsCtx = document.getElementById('economicsChart').getContext('2d');
             economicsChart = new Chart(economicsCtx, {
                 type: 'bar',
                 data: {
-                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    labels: [],
                     datasets: [
                         {
                             label: 'Import Cost (€)',
@@ -1121,7 +1149,7 @@
             updateTimestamp();
             await updateCurrentMetrics();
             await updatePowerChart("12h");  // Start with 12h view (default)
-            await update7dChart();
+            await updateEconomicsChart("7d");  // Start with 7d view (default)
             await updateTodayStats();
         }
 
@@ -1141,14 +1169,20 @@
             document.querySelectorAll('.timeframe-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const range = e.target.dataset.range;
-                    await updatePowerChart(range);
+                    const chartType = e.target.closest('.chart-card')?.querySelector('.chart-title')?.textContent || '';
+                    
+                    if (chartType.includes('Power')) {
+                        await updatePowerChart(range);
+                    } else if (chartType.includes('Grid Economics')) {
+                        await updateEconomicsChart(range);
+                    }
                 });
             });
             
             // Only set intervals after charts are fully initialized
             setInterval(updateCurrentMetrics, 30000);      // Update metrics every 30 seconds
-            setInterval(update24hChart, 60000);            // Update 24h chart every 60 seconds
-            setInterval(update7dChart, 300000);            // Update 7d chart every 5 minutes
+            setInterval(update24hChart, 60000);            // Update power chart every 60 seconds (respects user selection)
+            setInterval(update7dChart, 300000);            // Update economics chart every 5 minutes (respects user selection)
             setInterval(updateTodayStats, 120000);         // Update today stats every 2 minutes
         })();
     </script>

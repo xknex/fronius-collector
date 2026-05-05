@@ -396,83 +396,128 @@ async def get_24h_data():
     """Get 24-hour historical data for power flow chart. (Legacy endpoint - use /api/data/power?range=24h)"""
     return await get_power_data(range="24h")
 
-@app.get("/api/data/7d")
-async def get_7d_data():
-    """Get 7-day historical data for battery SOC trend."""
+@app.get("/api/data/economics")
+async def get_economics_data(range: str = "7d"):
+    """Get economics data (import costs vs export income) with configurable time range.
+    
+    Supported ranges: 7d, 1month, 1year
+    Returns daily, monthly, or yearly aggregated data.
+    """
     if query_api is None:
         return {"error": "InfluxDB not connected"}
     
+    # Define range parameters: (query_range, agg_window, label_format, days_back)
+    range_config = {
+        "7d": ("-8d", "1d", "%a", 7),           # Last 7 days with day names
+        "1month": ("-35d", "1d", "%d", 30),     # Last 30 days with day of month
+        "1year": ("-400d", "7d", "%b", 52)      # Last 52 weeks
+    }
+    
+    if range not in range_config:
+        return {"error": f"Invalid range. Supported: {', '.join(range_config.keys())}"}
+    
+    query_range, agg_window, date_format, days_expected = range_config[range]
+    
     try:
-        # Query grid consumption and feed-in totals for last 8 days
-        # (need 8 days to calculate 7 days of daily deltas)
+        # Query grid consumption and feed-in totals
         import_query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: -8d)
+  |> range(start: {query_range})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total")
-  |> aggregateWindow(every: 1d, fn: last, createEmpty: false)
+  |> aggregateWindow(every: {agg_window}, fn: last, createEmpty: false)
   |> sort(columns: ["_time"])
 '''
         
         export_query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: -8d)
+  |> range(start: {query_range})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "Grid_FeedIn_Total")
-  |> aggregateWindow(every: 1d, fn: last, createEmpty: false)
+  |> aggregateWindow(every: {agg_window}, fn: last, createEmpty: false)
   |> sort(columns: ["_time"])
 '''
         
         import_result = query_api.query(import_query)
         export_result = query_api.query(export_query)
         
-        # Parse results - collect all daily values in order
-        import_values = []
-        export_values = []
+        # Parse results - collect all values with timestamps
+        import_data = {}
+        export_data = {}
         
         for table in import_result:
             for record in table.records:
-                value = record.get_value()
-                import_values.append(value or 0)
+                timestamp = record.values.get("_time")
+                value = record.get_value() or 0
+                import_data[timestamp] = value
         
         for table in export_result:
             for record in table.records:
-                value = record.get_value()
-                export_values.append(value or 0)
+                timestamp = record.values.get("_time")
+                value = record.get_value() or 0
+                export_data[timestamp] = value
         
-        # Calculate daily deltas (consumption/export for each day)
-        # We have 8 days of data, so we calculate 7 daily deltas
+        # Get all unique timestamps and sort them
+        all_timestamps = sorted(set(import_data.keys()) | set(export_data.keys()))
+        
+        if not all_timestamps:
+            # Return empty data if no results
+            return {
+                "labels": [],
+                "import_costs": [],
+                "export_income": [],
+                "range": range,
+                "points": 0
+            }
+        
+        # Calculate daily/weekly/monthly deltas
         import_daily = []
         export_daily = []
-        day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        labels = []
         
-        for i in range(1, len(import_values)):
-            daily_import = max(0, (import_values[i] - import_values[i-1]))
-            daily_export = max(0, (export_values[i] - export_values[i-1]))
-            import_daily.append(daily_import)
-            export_daily.append(daily_export)
+        for i in range(1, len(all_timestamps)):
+            prev_ts = all_timestamps[i-1]
+            curr_ts = all_timestamps[i]
+            
+            import_delta = max(0, import_data.get(curr_ts, 0) - import_data.get(prev_ts, 0))
+            export_delta = max(0, export_data.get(curr_ts, 0) - export_data.get(prev_ts, 0))
+            
+            import_daily.append(import_delta)
+            export_daily.append(export_delta)
+            
+            # Format label based on range and timezone
+            local_time = to_local_time(curr_ts)
+            if range == "7d":
+                label = local_time.strftime(f"{date_format} %m/%d")
+            elif range == "1month":
+                label = local_time.strftime(f"%d")
+            else:  # 1year
+                label = local_time.strftime(f"{date_format}")
+            labels.append(label)
         
-        # Keep only last 7 days and calculate costs
-        import_daily = import_daily[-7:] if len(import_daily) >= 7 else import_daily
-        export_daily = export_daily[-7:] if len(export_daily) >= 7 else export_daily
-        
-        # Pad with zeros if we have fewer than 7 days
-        while len(import_daily) < 7:
-            import_daily.insert(0, 0)
-        while len(export_daily) < 7:
-            export_daily.insert(0, 0)
+        # Get pricing from environment (with defaults)
+        import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))
+        export_price = float(os.getenv("FEEDIN_PRICE_PER_KWH", "0.0604"))
         
         # Calculate costs and income
-        # Cost: 0.3€ per kWh imported, Income: 0.06€ per kWh exported
-        import_costs = [round(val * 0.3, 2) for val in import_daily]
-        export_income = [round(val * 0.06, 2) for val in export_daily]
+        import_costs = [round(val * import_price, 2) for val in import_daily]
+        export_income = [round(val * export_price, 2) for val in export_daily]
+        
+        logger.info(f"Economics data for range={range}: points={len(labels)}, first_label={labels[0] if labels else 'N/A'}, last_label={labels[-1] if labels else 'N/A'}")
         
         return {
-            "labels": day_labels,
+            "labels": labels,
             "import_costs": import_costs,
-            "export_income": export_income
+            "export_income": export_income,
+            "range": range,
+            "points": len(labels)
         }
     except Exception as e:
-        logger.error(f"Error querying 7d data: {e}")
+        logger.error(f"Error querying economics data for range {range}: {e}", exc_info=True)
         return {"error": str(e)}
+
+@app.get("/api/data/7d")
+async def get_7d_data():
+    """Get 7-day historical data for grid economics. (Legacy endpoint - use /api/data/economics?range=7d)"""
+    return await get_economics_data(range="7d")
 
 @app.get("/api/data/today")
 async def get_today_stats():
