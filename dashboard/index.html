@@ -913,9 +913,12 @@
         // Fetch economics data and update chart with specified range
         async function updateEconomicsChart(range = "7d") {
             try {
+                console.log(`[updateEconomicsChart] Fetching data for range: ${range}`);
                 currentEconomicsRange = range;
                 const response = await fetch(`/api/data/economics?range=${range}`);
                 const data = await response.json();
+                
+                console.log(`[updateEconomicsChart] API response:`, data);
                 
                 if (data.error) {
                     console.error('API error:', data.error);
@@ -924,10 +927,13 @@
 
                 // Update economics chart
                 if (economicsChart) {
+                    console.log(`[updateEconomicsChart] Updating chart with ${data.labels?.length || 0} labels`);
                     economicsChart.data.labels = data.labels || [];
                     economicsChart.data.datasets[0].data = data.import_costs || [];
                     economicsChart.data.datasets[1].data = data.export_income || [];
                     economicsChart.update('none');
+                } else {
+                    console.error('[updateEconomicsChart] economicsChart is not initialized');
                 }
                 
                 // Update active button state for economics chart
@@ -941,7 +947,7 @@
                     }
                 });
             } catch (error) {
-                console.error('Failed to fetch economics data:', error);
+                console.error('[updateEconomicsChart] Failed to fetch economics data:', error);
             }
         }
 
@@ -1165,16 +1171,23 @@
             // Initialize charts and set up data refresh
             await initCharts();
             
-            // Add event listeners to timeframe buttons
+            // Add event listeners to timeframe buttons with better detection
             document.querySelectorAll('.timeframe-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
                     const range = e.target.dataset.range;
-                    const chartType = e.target.closest('.chart-card')?.querySelector('.chart-title')?.textContent || '';
+                    const cardTitle = e.target.closest('.chart-card')?.querySelector('.chart-title')?.textContent || '';
                     
-                    if (chartType.includes('Power')) {
+                    console.log(`Button clicked: range=${range}, cardTitle=${cardTitle}`);
+                    
+                    if (cardTitle.includes('Power')) {
+                        console.log(`Updating power chart to ${range}`);
                         await updatePowerChart(range);
-                    } else if (chartType.includes('Grid Economics')) {
+                    } else if (cardTitle.includes('Grid Economics')) {
+                        console.log(`Updating economics chart to ${range}`);
                         await updateEconomicsChart(range);
+                    } else {
+                        console.log(`Unknown chart type: ${cardTitle}`);
                     }
                 });
             });
