@@ -543,8 +543,8 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div class="chart-title">Power Flow</div>
                     <div class="timeframe-selector">
-                        <button class="timeframe-btn active" data-range="3h">3H</button>
-                        <button class="timeframe-btn" data-range="12h">12H</button>
+                        <button class="timeframe-btn" data-range="3h">3H</button>
+                        <button class="timeframe-btn active" data-range="12h">12H</button>
                         <button class="timeframe-btn" data-range="24h">1D</button>
                         <button class="timeframe-btn" data-range="7d">1W</button>
                     </div>
@@ -865,10 +865,10 @@
         }
 
         // Track current time range for power chart
-        let currentPowerRange = "24h";
+        let currentPowerRange = "12h";
 
         // Fetch power data and update chart with specified range
-        async function updatePowerChart(range = "24h") {
+        async function updatePowerChart(range = "12h") {
             try {
                 currentPowerRange = range;
                 const response = await fetch(`/api/data/power?range=${range}`);
@@ -884,6 +884,7 @@
                     powerChart.data.labels = data.labels || [];
                     powerChart.data.datasets[0].data = data.solar || [];
                     powerChart.data.datasets[1].data = data.consumption || [];
+                    powerChart.data.datasets[2].data = data.battery || [];
                     powerChart.update('none');
                 }
 
@@ -901,7 +902,7 @@
 
         // Legacy function for backward compatibility
         async function update24hChart() {
-            await updatePowerChart("24h");
+            await updatePowerChart("12h");
         }
 
         // Fetch 7-day data and update chart
@@ -990,28 +991,46 @@
                             data: [],
                             borderColor: '#ffa500',
                             backgroundColor: 'rgba(255, 165, 0, 0.1)',
-                            tension: 0.4,
+                            tension: 0.6,
                             fill: true,
                             borderWidth: 2,
-                            pointRadius: 4,
-                            pointBackgroundColor: '#ffa500'
+                            pointRadius: 3,
+                            pointBackgroundColor: '#ffa500',
+                            yAxisID: 'y'
                         },
                         {
                             label: 'Consumption',
                             data: [],
                             borderColor: '#ff006e',
                             backgroundColor: 'rgba(255, 0, 110, 0.1)',
-                            tension: 0.4,
+                            tension: 0.6,
                             fill: true,
                             borderWidth: 2,
-                            pointRadius: 4,
-                            pointBackgroundColor: '#ff006e'
+                            pointRadius: 3,
+                            pointBackgroundColor: '#ff006e',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Battery SOC',
+                            data: [],
+                            borderColor: '#00ff88',
+                            backgroundColor: 'rgba(0, 255, 136, 0.05)',
+                            tension: 0.6,
+                            fill: true,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#00ff88',
+                            yAxisID: 'y1'
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: {
                             display: true,
@@ -1020,8 +1039,20 @@
                     },
                     scales: {
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             beginAtZero: true,
                             title: { display: true, text: 'Power (kW)' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Battery SOC (%)' },
+                            grid: { drawOnChartArea: false }
                         }
                     }
                 }
@@ -1120,7 +1151,7 @@
             // Load initial data
             updateTimestamp();
             await updateCurrentMetrics();
-            await updatePowerChart("24h");  // Start with 24h view
+            await updatePowerChart("12h");  // Start with 12h view (default)
             await update7dChart();
             await updateTodayStats();
         }

@@ -307,11 +307,11 @@ async def get_power_data(range: str = "24h"):
     query_range, agg_window, expected_points = range_config[range]
     
     try:
-        # Query power data with appropriate aggregation
+        # Query power data with appropriate aggregation (including battery SOC)
         query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: {query_range})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current")
+  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Battery_SOC")
   |> aggregateWindow(every: {agg_window}, fn: mean, createEmpty: false)
   |> sort(columns: ["_time"])
 '''
@@ -321,6 +321,7 @@ async def get_power_data(range: str = "24h"):
         # Parse results into time series
         solar_data = {}
         consumption_data = {}
+        battery_data = {}
         timestamps = []
         
         for table in result:
@@ -346,6 +347,8 @@ async def get_power_data(range: str = "24h"):
                     solar_data[timestamp] = value
                 elif field == "Consumption_Current":
                     consumption_data[timestamp] = value
+                elif field == "Battery_SOC":
+                    battery_data[timestamp] = value
                 
                 if timestamp not in timestamps:
                     timestamps.append(timestamp)
@@ -367,6 +370,7 @@ async def get_power_data(range: str = "24h"):
         # Build data arrays
         solar = [solar_data.get(t, 0) for t in timestamps]
         consumption = [consumption_data.get(t, 0) for t in timestamps]
+        battery = [battery_data.get(t, 0) for t in timestamps]
         
         # Log for debugging
         if labels:
@@ -379,6 +383,7 @@ async def get_power_data(range: str = "24h"):
             "labels": labels,
             "solar": solar,
             "consumption": consumption,
+            "battery": battery,
             "range": range,
             "points": len(timestamps)
         }
