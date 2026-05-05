@@ -733,7 +733,7 @@
                     </div>
                     <div class="status-item-row">
                         <span class="status-item-label">📊 Last Updated</span>
-                        <span class="status-item-value">${new Date().toLocaleTimeString()}</span>
+                        <span class="status-item-value">${new Date().toLocaleTimeString('en-US', { timeZone: serverTimezone })}</span>
                     </div>
                 `;
                 
@@ -764,7 +764,23 @@
             return `${minutes}m`;
         }
 
-        // Update timestamp
+        let serverTimezone = 'UTC';  // Default timezone
+
+        // Fetch server timezone configuration
+        async function initializeTimezone() {
+            try {
+                const response = await fetch('/api/config/timezone');
+                const data = await response.json();
+                if (data.timezone) {
+                    serverTimezone = data.timezone;
+                    console.log(`Server timezone: ${serverTimezone}`);
+                }
+            } catch (error) {
+                console.warn('Failed to fetch timezone config, using UTC:', error);
+            }
+        }
+
+        // Update timestamp with server timezone
         function updateTimestamp() {
             const now = new Date();
             const formatted = now.toLocaleString('en-US', {
@@ -773,7 +789,8 @@
                 day: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit'
+                second: '2-digit',
+                timeZone: serverTimezone
             });
             document.getElementById('timestamp').textContent = formatted;
         }
@@ -1109,11 +1126,15 @@
         }
 
         // Initialize on page load
-        updateTimestamp();
-        setInterval(updateTimestamp, 1000);
-
-        // Initialize charts and set up data refresh
         (async function() {
+            // Initialize timezone first
+            await initializeTimezone();
+            
+            // Then start updating timestamps
+            updateTimestamp();
+            setInterval(updateTimestamp, 1000);
+            
+            // Initialize charts and set up data refresh
             await initCharts();
             
             // Add event listeners to timeframe buttons

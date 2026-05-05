@@ -11,9 +11,20 @@ from influxdb_client import InfluxDBClient
 from influxdb_client.client.flux_table import FluxTable
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import time
+
+# Try to use zoneinfo (Python 3.9+), fall back to pytz
+try:
+    from zoneinfo import ZoneInfo
+    HAS_ZONEINFO = True
+except ImportError:
+    try:
+        import pytz
+        HAS_ZONEINFO = False
+    except ImportError:
+        HAS_ZONEINFO = None
 
 try:
     import psutil
@@ -24,6 +35,43 @@ except ImportError:
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Get timezone from environment or use system default
+TIMEZONE = os.getenv("TZ", "UTC")
+
+# Set timezone for the application
+os.environ['TZ'] = TIMEZONE
+try:
+    import time as time_module
+    time_module.tzset()
+except AttributeError:
+    logger.warning(f"tzset() not available on this platform. Using TZ={TIMEZONE}")
+
+logger.info(f"Application timezone set to: {TIMEZONE}")
+
+# Helper function to convert UTC timestamps to local timezone
+def to_local_time(dt):
+    """Convert UTC datetime to local timezone using the TZ environment variable."""
+    if dt is None:
+        return dt
+    
+    # If datetime is naive, assume it's UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    
+    # Convert to local timezone
+    try:
+        if HAS_ZONEINFO:
+            local_tz = ZoneInfo(TIMEZONE)
+            return dt.astimezone(local_tz)
+        elif HAS_ZONEINFO is False:  # pytz is available
+            local_tz = pytz.timezone(TIMEZONE)
+            return dt.astimezone(local_tz)
+    except Exception as e:
+        logger.warning(f"Failed to convert timezone to {TIMEZONE}: {e}")
+    
+    # Fall back to system default
+    return dt.astimezone()
 
 # Track app startup time for uptime calculation
 APP_START_TIME = time.time()
@@ -72,7 +120,9 @@ async def health_check():
         "influxdb": "disconnected",
         "db_latency": None,
         "api_latency": None,
-        "memory_usage": None
+        "memory_usage": None,
+        "timezone": TIMEZONE,
+        "timestamp": datetime.now().isoformat()
     }
     
     # Check InfluxDB connection and measure latency
@@ -108,6 +158,14 @@ async def health_check():
             result["memory_usage"] = None
     
     return result
+
+@app.get("/api/config/timezone")
+async def get_timezone_config():
+    """Get server timezone configuration."""
+    return {
+        "timezone": TIMEZONE,
+        "server_time": to_local_time(datetime.now(timezone.utc)).isoformat()
+    }
 
 @app.get("/api/data/current")
 async def get_current_data():
@@ -203,15 +261,18 @@ async def get_power_data(range: str = "24h"):
                 timestamp = record.values.get("_time")
                 value = record.get_value()
                 
+                # Convert to local time
+                local_timestamp = to_local_time(timestamp)
+                
                 # Format time based on range
                 if range == "3h":
-                    time_key = timestamp.strftime("%H:%M")
+                    time_key = local_timestamp.strftime("%H:%M")
                 elif range == "12h":
-                    time_key = timestamp.strftime("%H:%M")
+                    time_key = local_timestamp.strftime("%H:%M")
                 elif range == "24h":
-                    time_key = timestamp.strftime("%H:%M")
+                    time_key = local_timestamp.strftime("%H:%M")
                 else:  # 7d
-                    time_key = timestamp.strftime("%a %H:%M")
+                    time_key = local_timestamp.strftime("%a %H:%M")
                 
                 if field == "Solar_Produced_Current":
                     solar_data[timestamp] = value
@@ -227,13 +288,13 @@ async def get_power_data(range: str = "24h"):
         # Generate labels based on timestamps
         labels = []
         if range == "3h":
-            labels = [t.strftime("%H:%M") for t in timestamps]
+            labels = [to_local_time(t).strftime("%H:%M") for t in timestamps]
         elif range == "12h":
-            labels = [t.strftime("%H:%M") for t in timestamps]
+            labels = [to_local_time(t).strftime("%H:%M") for t in timestamps]
         elif range == "24h":
-            labels = [t.strftime("%H:%M") for t in timestamps]
+            labels = [to_local_time(t).strftime("%H:%M") for t in timestamps]
         else:  # 7d
-            labels = [t.strftime("%a %H:%M") for t in timestamps]
+            labels = [to_local_time(t).strftime("%a %H:%M") for t in timestamps]
         
         # Build data arrays
         solar = [solar_data.get(t, 0) for t in timestamps]
