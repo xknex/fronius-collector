@@ -19,6 +19,8 @@ services:
   dashboard:
     image: fronius-collector-beta
     container_name: fronius-dashboard
+    env_file:
+      - .env
     ports:
       - "8080:8080"
     environment:
@@ -27,6 +29,7 @@ services:
       INFLUX_ORG: ${INFLUX_ORG}
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       DASHBOARD_PORT: "8080"
+      TZ: ${TZ}
     command: python /app/dashboard/app.py
     depends_on:
       - influxdb2

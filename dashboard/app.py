@@ -15,6 +15,33 @@ from datetime import datetime, timedelta, timezone
 import logging
 import time
 
+# Load environment variables from .env file (for local development)
+# In Docker, environment variables should be passed via docker-compose env_file and environment
+try:
+    from dotenv import load_dotenv
+    
+    # Try multiple paths
+    possible_paths = [
+        Path(__file__).parent.parent / ".env",  # /app/.env in container, or parent in local dev
+        Path(__file__).parent / ".env",         # /app/dashboard/.env
+        Path.cwd() / ".env",                    # Current working directory
+    ]
+    
+    loaded = False
+    for env_path in possible_paths:
+        if env_path.exists():
+            load_dotenv(env_path)
+            print(f"✓ Loaded .env file from: {env_path}")
+            loaded = True
+            break
+    
+    if not loaded:
+        print(f"ℹ No .env file found. Using environment variables from docker-compose or system.")
+        print(f"  Checked paths: {[str(p) for p in possible_paths]}")
+        
+except ImportError:
+    print("ℹ python-dotenv not installed, using environment variables passed by docker-compose or system")
+
 # Try to use zoneinfo (Python 3.9+), fall back to pytz
 try:
     from zoneinfo import ZoneInfo
@@ -39,16 +66,23 @@ logger = logging.getLogger(__name__)
 # Get timezone from environment or use system default
 TIMEZONE = os.getenv("TZ", "UTC")
 
-# Set timezone for the application
-os.environ['TZ'] = TIMEZONE
-try:
-    import time as time_module
-    time_module.tzset()
-    logger.debug("Successfully called tzset()")
-except AttributeError:
-    logger.debug(f"tzset() not available on this platform (using explicit conversion)")
+logger.info(f"Checking TZ environment variable...")
+logger.info(f"TZ from os.getenv(): {TIMEZONE}")
+logger.info(f"Full environment TZ: {os.environ.get('TZ', 'NOT SET')}")
 
-logger.info(f"Application timezone from TZ environment: {TIMEZONE}")
+# Set timezone for the application
+if TIMEZONE != "UTC":
+    os.environ['TZ'] = TIMEZONE
+    try:
+        import time as time_module
+        time_module.tzset()
+        logger.info(f"Successfully set TZ={TIMEZONE} and called tzset()")
+    except AttributeError:
+        logger.info(f"tzset() not available on this platform, TZ set to {TIMEZONE}")
+else:
+    logger.warning(f"No TZ environment variable found, defaulting to UTC")
+
+logger.info(f"Application timezone: {TIMEZONE}")
 
 # Create timezone object once at startup for better performance
 try:
