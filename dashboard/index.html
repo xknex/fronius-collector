@@ -317,6 +317,38 @@
             letter-spacing: 1px;
         }
 
+        .timeframe-selector {
+            display: flex;
+            gap: 8px;
+        }
+
+        .timeframe-btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            background: rgba(0, 217, 255, 0.05);
+            color: var(--text-secondary);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+
+        .timeframe-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(0, 217, 255, 0.1);
+        }
+
+        .timeframe-btn.active {
+            border-color: var(--primary);
+            background: rgba(0, 217, 255, 0.2);
+            color: var(--primary);
+            box-shadow: 0 0 10px rgba(0, 217, 255, 0.3);
+        }
+
         .chart-container {
             position: relative;
             height: 300px;
@@ -508,7 +540,15 @@
         <!-- Charts -->
         <div class="charts-grid">
             <div class="chart-card">
-                <div class="chart-title">Power Flow (Last 24h)</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div class="chart-title">Power Flow</div>
+                    <div class="timeframe-selector">
+                        <button class="timeframe-btn active" data-range="3h">3H</button>
+                        <button class="timeframe-btn" data-range="12h">12H</button>
+                        <button class="timeframe-btn" data-range="24h">1D</button>
+                        <button class="timeframe-btn" data-range="7d">1W</button>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="powerChart"></canvas>
                 </div>
@@ -807,10 +847,14 @@
             }
         }
 
-        // Fetch 24-hour data and update chart
-        async function update24hChart() {
+        // Track current time range for power chart
+        let currentPowerRange = "24h";
+
+        // Fetch power data and update chart with specified range
+        async function updatePowerChart(range = "24h") {
             try {
-                const response = await fetch('/api/data/24h');
+                currentPowerRange = range;
+                const response = await fetch(`/api/data/power?range=${range}`);
                 const data = await response.json();
                 
                 if (data.error) {
@@ -825,9 +869,22 @@
                     powerChart.data.datasets[1].data = data.consumption || [];
                     powerChart.update('none');
                 }
+
+                // Update active button state
+                document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.range === range) {
+                        btn.classList.add('active');
+                    }
+                });
             } catch (error) {
-                console.error('Failed to fetch 24h data:', error);
+                console.error('Failed to fetch power data:', error);
             }
+        }
+
+        // Legacy function for backward compatibility
+        async function update24hChart() {
+            await updatePowerChart("24h");
         }
 
         // Fetch 7-day data and update chart
@@ -1046,7 +1103,7 @@
             // Load initial data
             updateTimestamp();
             await updateCurrentMetrics();
-            await update24hChart();
+            await updatePowerChart("24h");  // Start with 24h view
             await update7dChart();
             await updateTodayStats();
         }
@@ -1058,6 +1115,15 @@
         // Initialize charts and set up data refresh
         (async function() {
             await initCharts();
+            
+            // Add event listeners to timeframe buttons
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const range = e.target.dataset.range;
+                    await updatePowerChart(range);
+                });
+            });
+            
             // Only set intervals after charts are fully initialized
             setInterval(updateCurrentMetrics, 30000);      // Update metrics every 30 seconds
             setInterval(update24hChart, 60000);            // Update 24h chart every 60 seconds

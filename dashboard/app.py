@@ -157,19 +157,36 @@ async def get_current_data():
         logger.error(f"Error querying current data: {e}")
         return {"error": str(e)}
 
-@app.get("/api/data/24h")
-async def get_24h_data():
-    """Get 24-hour historical data for power flow chart."""
+@app.get("/api/data/power")
+async def get_power_data(range: str = "24h"):
+    """Get power flow data with configurable time range.
+    
+    Supported ranges: 3h, 12h, 24h, 7d
+    Automatically adjusts aggregation window for optimal visualization.
+    """
     if query_api is None:
         return {"error": "InfluxDB not connected"}
     
+    # Define range parameters: (query_range, agg_window, points_expected)
+    range_config = {
+        "3h": ("-3h", "5m", 36),
+        "12h": ("-12h", "15m", 48),
+        "24h": ("-24h", "30m", 48),
+        "7d": ("-7d", "4h", 42)
+    }
+    
+    if range not in range_config:
+        return {"error": f"Invalid range. Supported: {', '.join(range_config.keys())}"}
+    
+    query_range, agg_window, expected_points = range_config[range]
+    
     try:
-        # Query 24-hour data with 1-hour intervals
+        # Query power data with appropriate aggregation
         query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: -24h)
+  |> range(start: {query_range})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current")
-  |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+  |> aggregateWindow(every: {agg_window}, fn: mean, createEmpty: false)
   |> sort(columns: ["_time"])
 '''
         
@@ -178,37 +195,65 @@ async def get_24h_data():
         # Parse results into time series
         solar_data = {}
         consumption_data = {}
+        timestamps = []
         
         for table in result:
             for record in table.records:
                 field = record.values.get("_field")
-                time_key = record.values.get("_time").strftime("%H:%M") if hasattr(record.values.get("_time"), "strftime") else str(record.values.get("_time"))
+                timestamp = record.values.get("_time")
                 value = record.get_value()
                 
+                # Format time based on range
+                if range == "3h":
+                    time_key = timestamp.strftime("%H:%M")
+                elif range == "12h":
+                    time_key = timestamp.strftime("%H:%M")
+                elif range == "24h":
+                    time_key = timestamp.strftime("%H:%M")
+                else:  # 7d
+                    time_key = timestamp.strftime("%a %H:%M")
+                
                 if field == "Solar_Produced_Current":
-                    solar_data[time_key] = value
+                    solar_data[timestamp] = value
                 elif field == "Consumption_Current":
-                    consumption_data[time_key] = value
+                    consumption_data[timestamp] = value
+                
+                if timestamp not in timestamps:
+                    timestamps.append(timestamp)
         
-        # Get sorted time labels from the last 24 hours
+        # Sort timestamps
+        timestamps.sort()
+        
+        # Generate labels based on timestamps
         labels = []
-        now = datetime.now()
-        for i in range(24):
-            hour = (now - timedelta(hours=24-i)).strftime("%H:%M")
-            labels.append(hour)
+        if range == "3h":
+            labels = [t.strftime("%H:%M") for t in timestamps]
+        elif range == "12h":
+            labels = [t.strftime("%H:%M") for t in timestamps]
+        elif range == "24h":
+            labels = [t.strftime("%H:%M") for t in timestamps]
+        else:  # 7d
+            labels = [t.strftime("%a %H:%M") for t in timestamps]
         
-        # Build arrays with data or None for missing values
-        solar = [solar_data.get(label, 0) for label in labels]
-        consumption = [consumption_data.get(label, 0) for label in labels]
+        # Build data arrays
+        solar = [solar_data.get(t, 0) for t in timestamps]
+        consumption = [consumption_data.get(t, 0) for t in timestamps]
         
         return {
             "labels": labels,
             "solar": solar,
-            "consumption": consumption
+            "consumption": consumption,
+            "range": range,
+            "points": len(timestamps)
         }
     except Exception as e:
-        logger.error(f"Error querying 24h data: {e}")
+        logger.error(f"Error querying power data for range {range}: {e}")
         return {"error": str(e)}
+
+@app.get("/api/data/24h")
+async def get_24h_data():
+    """Get 24-hour historical data for power flow chart. (Legacy endpoint - use /api/data/power?range=24h)"""
+    return await get_power_data(range="24h")
 
 @app.get("/api/data/7d")
 async def get_7d_data():
