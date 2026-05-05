@@ -33,7 +33,7 @@ except ImportError:
     HAS_PSUTIL = False
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Get timezone from environment or use system default
@@ -44,10 +44,26 @@ os.environ['TZ'] = TIMEZONE
 try:
     import time as time_module
     time_module.tzset()
+    logger.debug("Successfully called tzset()")
 except AttributeError:
-    logger.warning(f"tzset() not available on this platform. Using TZ={TIMEZONE}")
+    logger.debug(f"tzset() not available on this platform (using explicit conversion)")
 
-logger.info(f"Application timezone set to: {TIMEZONE}")
+logger.info(f"Application timezone from TZ environment: {TIMEZONE}")
+
+# Create timezone object once at startup for better performance
+try:
+    if HAS_ZONEINFO:
+        LOCAL_TZ = ZoneInfo(TIMEZONE)
+        logger.info(f"Using ZoneInfo for timezone: {TIMEZONE}")
+    elif HAS_ZONEINFO is False:
+        LOCAL_TZ = pytz.timezone(TIMEZONE)
+        logger.info(f"Using pytz for timezone: {TIMEZONE}")
+    else:
+        LOCAL_TZ = None
+        logger.warning(f"No timezone library available, cannot set timezone to {TIMEZONE}")
+except Exception as e:
+    logger.error(f"Failed to initialize timezone {TIMEZONE}: {e}")
+    LOCAL_TZ = None
 
 # Helper function to convert UTC timestamps to local timezone
 def to_local_time(dt):
@@ -59,18 +75,17 @@ def to_local_time(dt):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     
-    # Convert to local timezone
-    try:
-        if HAS_ZONEINFO:
-            local_tz = ZoneInfo(TIMEZONE)
-            return dt.astimezone(local_tz)
-        elif HAS_ZONEINFO is False:  # pytz is available
-            local_tz = pytz.timezone(TIMEZONE)
-            return dt.astimezone(local_tz)
-    except Exception as e:
-        logger.warning(f"Failed to convert timezone to {TIMEZONE}: {e}")
+    # Use pre-initialized timezone object
+    if LOCAL_TZ:
+        try:
+            result = dt.astimezone(LOCAL_TZ)
+            logger.debug(f"Converted {dt} -> {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to convert timezone using {TIMEZONE}: {e}")
     
     # Fall back to system default
+    logger.debug(f"Using system default timezone for {dt}")
     return dt.astimezone()
 
 # Track app startup time for uptime calculation
@@ -165,6 +180,25 @@ async def get_timezone_config():
     return {
         "timezone": TIMEZONE,
         "server_time": to_local_time(datetime.now(timezone.utc)).isoformat()
+    }
+
+@app.get("/api/debug/timezone")
+async def debug_timezone():
+    """Debug endpoint to show timezone conversion."""
+    now_utc = datetime.now(timezone.utc)
+    now_local = to_local_time(now_utc)
+    
+    return {
+        "environment_tz": TIMEZONE,
+        "utc_now": now_utc.isoformat(),
+        "utc_now_str": now_utc.strftime("%H:%M:%S"),
+        "local_now": now_local.isoformat(),
+        "local_now_str": now_local.strftime("%H:%M:%S"),
+        "timezone_info": {
+            "tzinfo": str(now_local.tzinfo),
+            "utc_offset": str(now_local.utcoffset()),
+            "dst": str(now_local.dst())
+        }
     }
 
 @app.get("/api/data/current")
@@ -300,6 +334,13 @@ async def get_power_data(range: str = "24h"):
         solar = [solar_data.get(t, 0) for t in timestamps]
         consumption = [consumption_data.get(t, 0) for t in timestamps]
         
+        # Log for debugging
+        if labels:
+            logger.info(f"Power data for range={range}: first_label={labels[0]}, last_label={labels[-1]}, points={len(labels)}")
+            if timestamps:
+                logger.debug(f"First timestamp UTC: {timestamps[0]}, Local: {to_local_time(timestamps[0])}")
+                logger.debug(f"Last timestamp UTC: {timestamps[-1]}, Local: {to_local_time(timestamps[-1])}")
+        
         return {
             "labels": labels,
             "solar": solar,
@@ -308,7 +349,7 @@ async def get_power_data(range: str = "24h"):
             "points": len(timestamps)
         }
     except Exception as e:
-        logger.error(f"Error querying power data for range {range}: {e}")
+        logger.error(f"Error querying power data for range {range}: {e}", exc_info=True)
         return {"error": str(e)}
 
 @app.get("/api/data/24h")
