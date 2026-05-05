@@ -555,13 +555,6 @@
             </div>
 
             <div class="chart-card">
-                <div class="chart-title">Energy Distribution Today</div>
-                <div class="chart-container">
-                    <canvas id="distributionChart"></canvas>
-                </div>
-            </div>
-
-            <div class="chart-card">
                 <div class="chart-title">Grid Economics (7 Days)</div>
                 <div class="chart-container">
                     <canvas id="economicsChart"></canvas>
@@ -663,7 +656,7 @@
 
     <script>
         // Store chart instances for updates
-        let powerChart, distributionChart, economicsChart, gridChart;
+        let powerChart, economicsChart, gridChart;
         let startTime = Date.now();
         let lastHealthCheck = {};
 
@@ -1054,31 +1047,6 @@
                             max: 100,
                             title: { display: true, text: 'Battery SOC (%)' },
                             grid: { drawOnChartArea: false }
-                        }
-                    }
-                }
-            });
-
-            // Energy Distribution Chart (pie chart)
-            const distributionCtx = document.getElementById('distributionChart').getContext('2d');
-            distributionChart = new Chart(distributionCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Battery Charging', 'Home Consumption', 'Grid Export'],
-                    datasets: [{
-                        data: [33, 33, 34],
-                        backgroundColor: ['#00ff88', '#ff006e', '#00d9ff'],
-                        borderColor: '#0a0a14',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: { usePointStyle: true }
                         }
                     }
                 }
