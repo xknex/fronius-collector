@@ -168,6 +168,8 @@
             font-weight: 600;
             text-align: right;
         }
+        .status-item-value a { color: var(--primary); text-decoration: none; }
+        .status-item-value a:hover { text-decoration: underline; }
 
         .status-badge {
             display: inline-block;
@@ -742,7 +744,7 @@
                     </div>
                     <div class="status-item-row">
                         <span class="status-item-label">🔖 Git Commit</span>
-                        <span class="status-item-value">${(data.git_commit ? data.git_commit : '--')}${data.git_branch ? ' @ ' + data.git_branch : ''}</span>
+                        <span class="status-item-value">${(() => { const short = data.git_commit || '--'; if (data.git_commit_full && data.git_repo) { const url = `https://github.com/${data.git_repo}/commit/${data.git_commit_full}`; return `<a href="${url}" target="_blank" rel="noopener">${short}</a>${data.git_branch ? ' @ ' + data.git_branch : ''}`;} return `${short}${data.git_branch ? ' @ ' + data.git_branch : ''}`; })()}</span>
                     </div>
                     <div class="status-item-row">
                         <span class="status-item-label">⏱️ Database Latency</span>

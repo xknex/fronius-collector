@@ -225,6 +225,8 @@ async def health_check():
         "build_time": local_build_time(),
         "git_commit": GIT_COMMIT[:7] if GIT_COMMIT else None,
         "git_branch": GIT_BRANCH,
+        "git_commit_full": GIT_COMMIT if GIT_COMMIT else None,
+        "git_repo": GIT_REPO,
         "timestamp": datetime.now().isoformat()
     }
     
