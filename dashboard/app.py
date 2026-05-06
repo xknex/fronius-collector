@@ -240,18 +240,18 @@ async def get_current_data():
     """Get current energy data from InfluxDB (latest values)."""
     if query_api is None:
         return {"error": "InfluxDB not connected"}
-    
-        try:
-                # Query latest values for key fields
-                query = f'''from(bucket: "{INFLUX_BUCKET}")
+
+    try:
+        # Query latest values for key fields
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: -1h)
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-    |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Grid_FeedIn_Current" or r["_field"] == "Battery_SOC" or r["_field"] == "Autonomy_Percentage" or r["_field"] == "Grid_Consumption_Current" or r["_field"] == "Battery_Charging" or r["_field"] == "Battery_Discharging")
+  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Grid_FeedIn_Current" or r["_field"] == "Battery_SOC" or r["_field"] == "Autonomy_Percentage" or r["_field"] == "Grid_Consumption_Current" or r["_field"] == "Battery_Charging" or r["_field"] == "Battery_Discharging")
   |> last()
 '''
-        
+
         result = query_api.query(query)
-        
+
         # Parse results into dictionary
         data = {}
         for table in result:
@@ -274,14 +274,15 @@ async def get_current_data():
                     data["battery_charging"] = value
                 elif field == "Battery_Discharging":
                     data["battery_discharging"] = value
-        
+
         # Calculate efficiency (solar production / consumption if available)
         if "solar_production" in data and "consumption" in data and data["consumption"] > 0:
-            efficiency = (data["solar_production"] / (data["solar_production"] + data.get("grid_consumption", 0))) * 100 if (data["solar_production"] + data.get("grid_consumption", 0)) > 0 else 0
+            denom = data["solar_production"] + data.get("grid_consumption", 0)
+            efficiency = (data["solar_production"] / denom) * 100 if denom > 0 else 0
             data["efficiency"] = round(min(efficiency, 100), 1)
         else:
             data["efficiency"] = 0
-        
+
         return data
     except Exception as e:
         logger.error(f"Error querying current data: {e}")
