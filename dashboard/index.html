@@ -533,7 +533,7 @@
             </div>
 
             <div class="metric-card grid">
-                <div class="metric-label">🔌 Grid Feed-In <span class="badge direction-badge idle">IDLE</span></div>
+                <div class="metric-label">🔌 Grid Load <span class="badge direction-badge idle">IDLE</span></div>
                 <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
                 <div class="metric-trend">Loading...</div>
@@ -850,20 +850,24 @@
                 if (exportKW > 0) { gridKW = exportKW; dir = 'export'; }
                 else if (importKW > 0) { gridKW = importKW; dir = 'import'; }
 
-                document.querySelector('.grid .metric-value').textContent = gridKW.toFixed(2);
+                // Determine status by displayed precision: if 0.00 → Idle
+                const displayed = Number(gridKW.toFixed(2));
+                if (displayed === 0) { dir = 'idle'; }
+
+                document.querySelector('.grid .metric-value').textContent = displayed.toFixed(2);
                 const gridTrend = document.querySelector('.grid .metric-trend');
                 const badge = document.querySelector('.grid .direction-badge');
                 badge.classList.remove('export','import','idle');
                 if (dir === 'export') {
-                    gridTrend.textContent = '⬆ Feed-in';
+                    gridTrend.textContent = 'Feed-in';
                     badge.textContent = 'FEED-IN';
                     badge.classList.add('export');
                 } else if (dir === 'import') {
-                    gridTrend.textContent = '⬇ Import';
+                    gridTrend.textContent = 'Import';
                     badge.textContent = 'IMPORT';
                     badge.classList.add('import');
                 } else {
-                    gridTrend.textContent = '— Idle';
+                    gridTrend.textContent = 'Idle';
                     badge.textContent = 'IDLE';
                     badge.classList.add('idle');
                 }
