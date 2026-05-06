@@ -284,20 +284,28 @@
             color: var(--text-secondary);
         }
 
+        /* Unified pill status style for all cards */
         .metric-trend {
-            font-size: 12px;
-            margin-top: 10px;
-            padding: 5px 10px;
-            background: rgba(0, 255, 136, 0.1);
-            border-radius: 5px;
-            color: var(--success);
             display: inline-block;
+            margin-top: 12px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            background: rgba(160,160,160,0.10);
+            user-select: none;
         }
-
-        .metric-trend.negative {
-            background: rgba(255, 0, 110, 0.1);
-            color: var(--accent);
-        }
+        .metric-trend.trend--export { border-color: var(--primary); color: #00d9ff; background: rgba(0,217,255,0.15); }
+        .metric-trend.trend--import { border-color: #ff006e; color: #ff006e; background: rgba(255,0,110,0.15); }
+        .metric-trend.trend--active { border-color: var(--primary); color: #00d9ff; background: rgba(0,217,255,0.15); }
+        .metric-trend.trend--idle   { border-color: var(--border); color: var(--text-secondary); background: rgba(160,160,160,0.12); }
+        .metric-trend.trend--success{ border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.12); }
+        .metric-trend.trend--warn   { border-color: var(--warning); color: var(--warning); background: rgba(255,165,0,0.12); }
+        .metric-trend.trend--charge { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.12); }
+        .metric-trend.trend--discharge{ border-color: #ff006e; color: #ff006e; background: rgba(255,0,110,0.15); }
 
         /* Specific metric colors */
         .solar .metric-value { color: #ffa500; }
@@ -534,7 +542,7 @@
             </div>
 
             <div class="metric-card grid">
-                <div class="metric-label">🔌 Grid Load <span class="badge direction-badge idle">IDLE</span></div>
+                <div class="metric-label">🔌 Grid Load</div>
                 <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
                 <div class="metric-trend">Loading...</div>
@@ -837,14 +845,18 @@
                 // Update Solar Production
                 document.querySelector('.solar .metric-value').textContent = metrics.solar.toFixed(2);
                 const solarTrend = document.querySelector('.solar .metric-trend');
-                solarTrend.textContent = metrics.solar > 0 ? '⬆ Active' : '⬇ Idle';
+                solarTrend.classList.remove('trend--active','trend--idle');
+                if (metrics.solar > 0) { solarTrend.textContent = 'Active'; solarTrend.classList.add('trend--active'); }
+                else { solarTrend.textContent = 'Idle'; solarTrend.classList.add('trend--idle'); }
 
                 // Update Consumption
                 document.querySelector('.consumption .metric-value').textContent = metrics.consumption.toFixed(2);
                 const consumptionTrend = document.querySelector('.consumption .metric-trend');
-                consumptionTrend.textContent = metrics.consumption > 0 ? '⬆ Active' : '⬇ Idle';
+                consumptionTrend.classList.remove('trend--active','trend--idle');
+                if (metrics.consumption > 0) { consumptionTrend.textContent = 'Active'; consumptionTrend.classList.add('trend--active'); }
+                else { consumptionTrend.textContent = 'Idle'; consumptionTrend.classList.add('trend--idle'); }
 
-                // Update Grid Feed-In / Import with direction indicator
+                // Update Grid Load (Feed-in vs Import) using pill status only
                 const exportKW = Number(data.grid_feed_in || 0);
                 const importKW = Number(data.grid_consumption || 0);
                 let gridKW = 0; let dir = 'idle';
@@ -857,34 +869,19 @@
 
                 document.querySelector('.grid .metric-value').textContent = displayed.toFixed(2);
                 const gridTrend = document.querySelector('.grid .metric-trend');
-                const badge = document.querySelector('.grid .direction-badge');
-                badge.classList.remove('export','import','idle');
-                if (dir === 'export') {
-                    gridTrend.textContent = 'Feed-in';
-                    badge.textContent = 'FEED-IN';
-                    badge.classList.add('export');
-                } else if (dir === 'import') {
-                    gridTrend.textContent = 'Import';
-                    badge.textContent = 'IMPORT';
-                    badge.classList.add('import');
-                } else {
-                    gridTrend.textContent = 'Idle';
-                    badge.textContent = 'IDLE';
-                    badge.classList.add('idle');
-                }
+                gridTrend.classList.remove('trend--export','trend--import','trend--idle');
+                if (dir === 'export') { gridTrend.textContent = 'Feed-in'; gridTrend.classList.add('trend--export'); }
+                else if (dir === 'import') { gridTrend.textContent = 'Import'; gridTrend.classList.add('trend--import'); }
+                else { gridTrend.textContent = 'Idle'; gridTrend.classList.add('trend--idle'); }
 
                 // Update Battery SOC
                 document.querySelector('.battery .metric-value').textContent = metrics.battery.toFixed(1);
                 const batteryTrend = document.querySelector('.battery .metric-trend');
-                if (metrics.battery > 80) {
-                    batteryTrend.textContent = '✓ Well charged';
-                } else if (metrics.battery > 50) {
-                    batteryTrend.textContent = '⬆ Charging';
-                } else if (metrics.battery > 20) {
-                    batteryTrend.textContent = '⬇ Discharging';
-                } else {
-                    batteryTrend.textContent = '⚠ Low charge';
-                }
+                batteryTrend.classList.remove('trend--success','trend--charge','trend--discharge','trend--warn');
+                if (metrics.battery > 80) { batteryTrend.textContent = 'Well charged'; batteryTrend.classList.add('trend--success'); }
+                else if (metrics.battery > 50) { batteryTrend.textContent = 'Charging'; batteryTrend.classList.add('trend--charge'); }
+                else if (metrics.battery > 20) { batteryTrend.textContent = 'Discharging'; batteryTrend.classList.add('trend--discharge'); }
+                else { batteryTrend.textContent = 'Low charge'; batteryTrend.classList.add('trend--warn'); }
 
                 // Update Autonomy
                 const allCards = document.querySelectorAll('.metric-card');
@@ -892,15 +889,11 @@
                     const autonomyCard = allCards[4];
                     autonomyCard.querySelector('.metric-value').textContent = metrics.autonomy.toFixed(0);
                     const autonomyTrend = autonomyCard.querySelector('.metric-trend');
-                    if (metrics.autonomy > 80) {
-                        autonomyTrend.textContent = '✓ Excellent';
-                    } else if (metrics.autonomy > 60) {
-                        autonomyTrend.textContent = '✓ Good';
-                    } else if (metrics.autonomy > 40) {
-                        autonomyTrend.textContent = '→ Fair';
-                    } else {
-                        autonomyTrend.textContent = '⚠ Limited';
-                    }
+                    autonomyTrend.classList.remove('trend--success','trend--good','trend--fair','trend--warn');
+                    if (metrics.autonomy > 80) { autonomyTrend.textContent = 'Excellent'; autonomyTrend.classList.add('trend--success'); }
+                    else if (metrics.autonomy > 60) { autonomyTrend.textContent = 'Good'; autonomyTrend.classList.add('trend--success'); }
+                    else if (metrics.autonomy > 40) { autonomyTrend.textContent = 'Fair'; autonomyTrend.classList.add('trend--fair'); }
+                    else { autonomyTrend.textContent = 'Limited'; autonomyTrend.classList.add('trend--warn'); }
                 }
             } catch (error) {
                 console.error('Failed to fetch current metrics:', error);
