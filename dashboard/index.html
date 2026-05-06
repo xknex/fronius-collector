@@ -192,6 +192,24 @@
             color: var(--accent);
         }
 
+        /* Small pill badge used on metric cards */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            margin-left: 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            vertical-align: middle;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            background: rgba(160,160,160,0.1);
+        }
+        .badge.export { border-color: var(--primary); color: #00d9ff; background: rgba(0,217,255,0.15); }
+        .badge.import { border-color: #ff006e; color: #ff006e; background: rgba(255,0,110,0.15); }
+        .badge.idle   { border-color: var(--border); color: var(--text-secondary); background: rgba(160,160,160,0.12); }
+
         h1 {
             font-size: 28px;
             color: var(--primary);
@@ -515,7 +533,7 @@
             </div>
 
             <div class="metric-card grid">
-                <div class="metric-label">🔌 Grid Feed-In</div>
+                <div class="metric-label">🔌 Grid Feed-In <span class="badge direction-badge idle">IDLE</span></div>
                 <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
                 <div class="metric-trend">Loading...</div>
@@ -825,10 +843,30 @@
                 const consumptionTrend = document.querySelector('.consumption .metric-trend');
                 consumptionTrend.textContent = metrics.consumption > 0 ? '⬆ Active' : '⬇ Idle';
 
-                // Update Grid Feed-In
-                document.querySelector('.grid .metric-value').textContent = metrics.grid.toFixed(2);
+                // Update Grid Feed-In / Import with direction indicator
+                const exportKW = Number(data.grid_feed_in || 0);
+                const importKW = Number(data.grid_consumption || 0);
+                let gridKW = 0; let dir = 'idle';
+                if (exportKW > 0) { gridKW = exportKW; dir = 'export'; }
+                else if (importKW > 0) { gridKW = importKW; dir = 'import'; }
+
+                document.querySelector('.grid .metric-value').textContent = gridKW.toFixed(2);
                 const gridTrend = document.querySelector('.grid .metric-trend');
-                gridTrend.textContent = metrics.grid > 0 ? '⬆ Exporting' : '⬇ Importing';
+                const badge = document.querySelector('.grid .direction-badge');
+                badge.classList.remove('export','import','idle');
+                if (dir === 'export') {
+                    gridTrend.textContent = '⬆ Feed-in';
+                    badge.textContent = 'FEED-IN';
+                    badge.classList.add('export');
+                } else if (dir === 'import') {
+                    gridTrend.textContent = '⬇ Import';
+                    badge.textContent = 'IMPORT';
+                    badge.classList.add('import');
+                } else {
+                    gridTrend.textContent = '— Idle';
+                    badge.textContent = 'IDLE';
+                    badge.classList.add('idle');
+                }
 
                 // Update Battery SOC
                 document.querySelector('.battery .metric-value').textContent = metrics.battery.toFixed(1);
