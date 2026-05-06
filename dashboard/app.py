@@ -14,6 +14,9 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import logging
 import time
+import json
+from urllib.request import urlopen, Request
+from urllib.error import URLError
 
 # Load environment variables from .env file (for local development)
 # In Docker, environment variables should be passed via docker-compose env_file and environment
@@ -142,6 +145,39 @@ INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "")
 INFLUX_ORG = os.getenv("INFLUX_ORG", "org")
 INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "fronius")
 
+# Build / Git metadata (best-effort)
+BUILD_TIME = os.getenv("BUILD_TIME")
+try:
+    if not BUILD_TIME:
+        ts_path = Path("/app/.build_time")
+        if ts_path.exists():
+            BUILD_TIME = ts_path.read_text().strip()
+except Exception:
+    BUILD_TIME = None
+
+GIT_REPO = os.getenv("GIT_REPO", "xknex/fronius-collector")
+GIT_BRANCH = os.getenv("GIT_BRANCH", "dashboard")
+GIT_COMMIT = os.getenv("GIT_COMMIT", "")
+AUTO_FETCH_COMMIT = os.getenv("GIT_AUTO_FETCH_COMMIT", "true").lower() in ("1","true","yes","on")
+
+def get_latest_commit(repo: str, branch: str, timeout: float = 3.0) -> str:
+    try:
+        url = f"https://api.github.com/repos/{repo}/commits/{branch}"
+        req = Request(url, headers={"User-Agent": "fronius-dashboard"})
+        with urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            sha = data.get("sha")
+            if isinstance(sha, str) and len(sha) >= 7:
+                return sha
+    except URLError as e:
+        logger.info(f"GitHub commit fetch failed (network): {e}")
+    except Exception as e:
+        logger.info(f"GitHub commit fetch error: {e}")
+    return ""
+
+if not GIT_COMMIT and AUTO_FETCH_COMMIT:
+    GIT_COMMIT = get_latest_commit(GIT_REPO, GIT_BRANCH)
+
 try:
     influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
     query_api = influx_client.query_api()
@@ -171,6 +207,9 @@ async def health_check():
         "api_latency": None,
         "memory_usage": None,
         "timezone": TIMEZONE,
+        "build_time": BUILD_TIME,
+        "git_commit": GIT_COMMIT[:7] if GIT_COMMIT else None,
+        "git_branch": GIT_BRANCH,
         "timestamp": datetime.now().isoformat()
     }
     

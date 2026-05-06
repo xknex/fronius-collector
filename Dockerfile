@@ -28,6 +28,9 @@ COPY collector_docker.py .
 # Create log directory
 RUN mkdir -p /app/logs
 
+# Record build timestamp for dashboard status
+RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > /app/.build_time
+
 # Create volumes
 VOLUME ["/app/logs"]
 

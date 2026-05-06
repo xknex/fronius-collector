@@ -737,6 +737,14 @@
                         </span>
                     </div>
                     <div class="status-item-row">
+                        <span class="status-item-label">🏗️ Build Time</span>
+                        <span class="status-item-value">${data.build_time || '--'}</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">🔖 Git Commit</span>
+                        <span class="status-item-value">${(data.git_commit ? data.git_commit : '--')}${data.git_branch ? ' @ ' + data.git_branch : ''}</span>
+                    </div>
+                    <div class="status-item-row">
                         <span class="status-item-label">⏱️ Database Latency</span>
                         <span class="status-item-value">${data.db_latency || '--'}ms</span>
                     </div>
