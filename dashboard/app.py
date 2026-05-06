@@ -403,118 +403,73 @@ async def get_24h_data():
 
 @app.get("/api/data/economics")
 async def get_economics_data(range: str = "7d"):
-    """Get economics data (import costs vs export income) with configurable time range.
-    
-    Supported ranges: 7d, 1month, 1year
-    Returns daily, monthly, or yearly aggregated data.
+    """Return import costs and export income bars with stable labels.
+
+    Ranges:
+    - 7d: last 7 days (rightmost = today)
+    - 1month: last 30 days (rightmost = today)
+    - 1year: last 12 months (rightmost = current month)
     """
     if query_api is None:
         return {"error": "InfluxDB not connected"}
-    
-    # Define range parameters: (query_range, agg_window, label_format, days_back)
-    range_config = {
-        "7d": ("-8d", "1d", "%a", 7),           # Last 7 days with day names
-        "1month": ("-35d", "1d", "%d", 30),     # Last 30 days with day of month
-        "1year": ("-400d", "7d", "%b", 52)      # Last 52 weeks
+
+    cfg = {
+        "7d":     {"start": "-8d",  "window": "1d",  "points": 7,  "label": "%a"},
+        "1month": {"start": "-35d", "window": "1d",  "points": 30, "label": "%d"},
+        "1year":  {"start": "-13mo","window": "1mo", "points": 12, "label": "%b"},
     }
-    
-    if range not in range_config:
-        return {"error": f"Invalid range. Supported: {', '.join(range_config.keys())}"}
-    
-    query_range, agg_window, date_format, days_expected = range_config[range]
-    
+    if range not in cfg:
+        return {"error": f"Invalid range. Supported: {', '.join(cfg.keys())}"}
+
+    start = cfg[range]["start"]
+    window = cfg[range]["window"]
+    points_expected = cfg[range]["points"]
+    label_fmt = cfg[range]["label"]
+
     try:
-        # Query grid consumption and feed-in totals
-        import_query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: {query_range})
+        # Build a reusable Flux snippet for daily/monthly deltas from cumulative totals
+        def flux_for(field: str) -> str:
+            return f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: {start})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total")
-  |> aggregateWindow(every: {agg_window}, fn: last, createEmpty: false)
-  |> sort(columns: ["_time"])
-'''
-        
-        export_query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: {query_range})
-  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => r["_field"] == "Grid_FeedIn_Total")
-  |> aggregateWindow(every: {agg_window}, fn: last, createEmpty: false)
-  |> sort(columns: ["_time"])
-'''
-        
-        import_result = query_api.query(import_query)
-        export_result = query_api.query(export_query)
-        
-        # Parse results - collect all values with timestamps
-        import_data = {}
-        export_data = {}
-        
+  |> filter(fn: (r) => r["_field"] == "{field}")
+  |> aggregateWindow(every: {window}, fn: last, createEmpty: true)
+  |> difference(nonNegative: true)
+  |> keep(columns: ["_time","_value"])
+  |> sort(columns: ["_time"])'''
+
+        import_result = query_api.query(flux_for("Grid_Consumption_Total"))
+        export_result = query_api.query(flux_for("Grid_FeedIn_Total"))
+
+        # Parse results -> timestamp:value (kWh per bucket)
+        imp = {}
+        exp = {}
         for table in import_result:
-            for record in table.records:
-                timestamp = record.values.get("_time")
-                value = record.get_value() or 0
-                import_data[timestamp] = value
-        
+            for rec in table.records:
+                imp[rec.get_time()] = max(0.0, float(rec.get_value() or 0))
         for table in export_result:
-            for record in table.records:
-                timestamp = record.values.get("_time")
-                value = record.get_value() or 0
-                export_data[timestamp] = value
-        
-        # Get all unique timestamps and sort them
-        all_timestamps = sorted(set(import_data.keys()) | set(export_data.keys()))
-        
-        if not all_timestamps:
-            # Return empty data if no results
-            return {
-                "labels": [],
-                "import_costs": [],
-                "export_income": [],
-                "range": range,
-                "points": 0
-            }
-        
-        # Calculate daily/weekly/monthly deltas
-        import_daily = []
-        export_daily = []
-        labels = []
-        
-        for i in range(1, len(all_timestamps)):
-            prev_ts = all_timestamps[i-1]
-            curr_ts = all_timestamps[i]
-            
-            import_delta = max(0, import_data.get(curr_ts, 0) - import_data.get(prev_ts, 0))
-            export_delta = max(0, export_data.get(curr_ts, 0) - export_data.get(prev_ts, 0))
-            
-            import_daily.append(import_delta)
-            export_daily.append(export_delta)
-            
-            # Format label based on range and timezone
-            local_time = to_local_time(curr_ts)
-            if range == "7d":
-                label = local_time.strftime(f"{date_format} %m/%d")
-            elif range == "1month":
-                label = local_time.strftime(f"%d")
-            else:  # 1year
-                label = local_time.strftime(f"{date_format}")
-            labels.append(label)
-        
-        # Get pricing from environment (with defaults)
+            for rec in table.records:
+                exp[rec.get_time()] = max(0.0, float(rec.get_value() or 0))
+
+        # Compose timeline from union and take the last N points
+        ts = sorted(set(imp.keys()) | set(exp.keys()))
+        if not ts:
+            return {"labels": [], "import_costs": [], "export_income": [], "range": range, "points": 0}
+        ts = ts[-points_expected:]
+
+        # Labels aligned to selected range; rightmost is current period
+        labels = [to_local_time(t).strftime(label_fmt) for t in ts]
+        # Ensure rightmost label reflects the current period explicitly
+        now_local = to_local_time(datetime.now(timezone.utc))
+        labels[-1] = now_local.strftime(label_fmt)
+
+        # Monetary calculation
         import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))
         export_price = float(os.getenv("FEEDIN_PRICE_PER_KWH", "0.0604"))
-        
-        # Calculate costs and income
-        import_costs = [round(val * import_price, 2) for val in import_daily]
-        export_income = [round(val * export_price, 2) for val in export_daily]
-        
-        logger.info(f"Economics data for range={range}: points={len(labels)}, first_label={labels[0] if labels else 'N/A'}, last_label={labels[-1] if labels else 'N/A'}")
-        
-        return {
-            "labels": labels,
-            "import_costs": import_costs,
-            "export_income": export_income,
-            "range": range,
-            "points": len(labels)
-        }
+        import_costs = [round((imp.get(t, 0.0)) * import_price, 2) for t in ts]
+        export_income = [round((exp.get(t, 0.0)) * export_price, 2) for t in ts]
+
+        return {"labels": labels, "import_costs": import_costs, "export_income": export_income, "range": range, "points": len(labels)}
     except Exception as e:
         logger.error(f"Error querying economics data for range {range}: {e}", exc_info=True)
         return {"error": str(e)}
