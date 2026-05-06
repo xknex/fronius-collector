@@ -451,23 +451,59 @@ async def get_economics_data(range: str = "7d"):
             for rec in table.records:
                 exp[rec.get_time()] = max(0.0, float(rec.get_value() or 0))
 
-        # Compose timeline from union and take the last N points
-        ts = sorted(set(imp.keys()) | set(exp.keys()))
-        if not ts:
-            return {"labels": [], "import_costs": [], "export_income": [], "range": range, "points": 0}
-        ts = ts[-points_expected:]
-
-        # Labels aligned to selected range; rightmost is current period
-        labels = [to_local_time(t).strftime(label_fmt) for t in ts]
-        # Ensure rightmost label reflects the current period explicitly
+        # Build expected local-time buckets to avoid timezone drift duplicates
         now_local = to_local_time(datetime.now(timezone.utc))
-        labels[-1] = now_local.strftime(label_fmt)
 
-        # Monetary calculation
+        def day_key(dt):
+            d = to_local_time(dt)
+            return d.strftime("%Y-%m-%d")
+
+        def month_key(dt):
+            d = to_local_time(dt)
+            return d.strftime("%Y-%m")
+
+        # Aggregate deltas by local bucket key
+        imp_by_key = {}
+        exp_by_key = {}
+        if range in ("7d", "1month"):
+            for t, v in imp.items():
+                k = day_key(t)
+                imp_by_key[k] = imp_by_key.get(k, 0.0) + v
+            for t, v in exp.items():
+                k = day_key(t)
+                exp_by_key[k] = exp_by_key.get(k, 0.0) + v
+            # Expected last N days ending today (inclusive)
+            days = [ (now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(points_expected-1, -1, -1) ]
+            labels = [ datetime.strptime(d, "%Y-%m-%d").strftime(label_fmt) for d in days ]
+            ts_keys = days
+        else:  # 1year -> last 12 months ending current month
+            for t, v in imp.items():
+                k = month_key(t)
+                imp_by_key[k] = imp_by_key.get(k, 0.0) + v
+            for t, v in exp.items():
+                k = month_key(t)
+                exp_by_key[k] = exp_by_key.get(k, 0.0) + v
+            # Generate year-month keys
+            ym_keys = []
+            y = now_local.year
+            m = now_local.month
+            for _ in range(points_expected):
+                ym_keys.append(f"{y:04d}-{m:02d}")
+                m -= 1
+                if m == 0:
+                    m = 12
+                    y -= 1
+            ym_keys.reverse()
+            ts_keys = ym_keys
+            labels = []
+            for key in ts_keys:
+                labels.append(datetime.strptime(key, "%Y-%m").strftime(label_fmt))
+
+        # Monetary calculation aligned to expected keys
         import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))
         export_price = float(os.getenv("FEEDIN_PRICE_PER_KWH", "0.0604"))
-        import_costs = [round((imp.get(t, 0.0)) * import_price, 2) for t in ts]
-        export_income = [round((exp.get(t, 0.0)) * export_price, 2) for t in ts]
+        import_costs = [round(imp_by_key.get(k, 0.0) * import_price, 2) for k in ts_keys]
+        export_income = [round(exp_by_key.get(k, 0.0) * export_price, 2) for k in ts_keys]
 
         return {"labels": labels, "import_costs": import_costs, "export_income": export_income, "range": range, "points": len(labels)}
     except Exception as e:
