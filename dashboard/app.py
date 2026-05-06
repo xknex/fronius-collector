@@ -241,12 +241,12 @@ async def get_current_data():
     if query_api is None:
         return {"error": "InfluxDB not connected"}
     
-    try:
-        # Query latest values for key fields
-          query = f'''from(bucket: "{INFLUX_BUCKET}")
+        try:
+                # Query latest values for key fields
+                query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: -1h)
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-      |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Grid_FeedIn_Current" or r["_field"] == "Battery_SOC" or r["_field"] == "Autonomy_Percentage" or r["_field"] == "Grid_Consumption_Current" or r["_field"] == "Battery_Charging" or r["_field"] == "Battery_Discharging")
+    |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Grid_FeedIn_Current" or r["_field"] == "Battery_SOC" or r["_field"] == "Autonomy_Percentage" or r["_field"] == "Grid_Consumption_Current" or r["_field"] == "Battery_Charging" or r["_field"] == "Battery_Discharging")
   |> last()
 '''
         
