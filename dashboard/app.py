@@ -178,6 +178,21 @@ def get_latest_commit(repo: str, branch: str, timeout: float = 3.0) -> str:
 if not GIT_COMMIT and AUTO_FETCH_COMMIT:
     GIT_COMMIT = get_latest_commit(GIT_REPO, GIT_BRANCH)
 
+def local_build_time() -> str | None:
+    if not BUILD_TIME:
+        return None
+    try:
+        s = BUILD_TIME.strip()
+        # Normalize 'Z' to +00:00 for fromisoformat
+        if s.endswith('Z'):
+            s = s[:-1] + '+00:00'
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return to_local_time(dt).strftime('%Y-%m-%d %H:%M:%S %Z')
+    except Exception:
+        return BUILD_TIME
+
 try:
     influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
     query_api = influx_client.query_api()
@@ -207,7 +222,7 @@ async def health_check():
         "api_latency": None,
         "memory_usage": None,
         "timezone": TIMEZONE,
-        "build_time": BUILD_TIME,
+        "build_time": local_build_time(),
         "git_commit": GIT_COMMIT[:7] if GIT_COMMIT else None,
         "git_branch": GIT_BRANCH,
         "timestamp": datetime.now().isoformat()
