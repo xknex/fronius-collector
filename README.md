@@ -46,7 +46,7 @@ The project runs three Docker services:
 - **Docker Engine and Docker Compose**
 - **Fronius Inverter** (GEN24 or compatible model)
 - **InfluxDB 2.x** (included in docker-compose, or use existing instance)
-  - An existing bucket (e.g., "fronius_clean")
+  - An existing bucket (e.g., "fronius")
   - An existing Access Token with write privileges
 - **Network Access**:
   - Between collector and Fronius inverter (port 80/443)
@@ -224,7 +224,7 @@ FRONIUS_INVERTER_DEVICE_ID=1                 # Device ID (usually 1)
 INFLUX_URL=http://influxdb2:8086             # InfluxDB URL (use 'influxdb2' for docker-compose)
 INFLUX_TOKEN=your_influxdb_token_here        # InfluxDB API token
 INFLUX_ORG=org                               # InfluxDB organization name
-INFLUX_BUCKET=fronius_clean                  # InfluxDB bucket name
+INFLUX_BUCKET=fronius                        # InfluxDB bucket name
 
 # Collection & Tagging
 POLLING_INTERVAL=10                          # Seconds between data collection (default: 10)
@@ -270,7 +270,7 @@ This will:
 
 **Verify Data Collection:**
 - Log in to InfluxDB at **http://localhost:8086** (if using the included service)
-- Use the Data Explorer to check written data in your 'fronius_clean' bucket
+- Use the Data Explorer to check written data in your 'fronius' bucket
 - Logs are stored in `./logs/collector.log`
 
 Check collector logs:

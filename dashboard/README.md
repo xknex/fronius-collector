@@ -76,7 +76,7 @@ To enable actual data collection:
        org=os.getenv("INFLUX_ORG")
    )
    query_api = client.query_api()
-   # Query your fronius_clean bucket
+   # Query your fronius bucket
    ```
 
 3. Update the frontend (`index.html`) to fetch data from the API instead of using mock data
@@ -89,7 +89,7 @@ For the FastAPI backend, set environment variables:
 export INFLUX_URL="http://localhost:8086"
 export INFLUX_TOKEN="your-influxdb-token"
 export INFLUX_ORG="your-org"
-export INFLUX_BUCKET="fronius_clean"
+export INFLUX_BUCKET="fronius"
 export DASHBOARD_PORT="8080"
 ```
 

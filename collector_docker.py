@@ -174,7 +174,7 @@ DEFAULT_CONFIG = {
         "url": "http://OUR_INFLUXDB_HOST:8086",
         "token": "YOUR_INFLUXDB_TOKEN",
         "org": "org",
-        "bucket": "fronius_clean",
+        "bucket": "fronius",
     },
     "polling": {"interval": 10},
     "tags": {"source": "SymoGEN24", "site": "home"},
