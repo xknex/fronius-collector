@@ -427,7 +427,7 @@ async def get_economics_data(range: str = "7d"):
     label_fmt = cfg[range]["label"]
 
     try:
-        # Build a reusable Flux snippet for daily/monthly deltas from cumulative totals
+        # Fetch windowed cumulative totals (filled), we'll compute deltas in Python
         def flux_for(field: str) -> str:
             return f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: {start})
@@ -435,14 +435,13 @@ async def get_economics_data(range: str = "7d"):
   |> filter(fn: (r) => r["_field"] == "{field}")
   |> aggregateWindow(every: {window}, fn: last, createEmpty: true)
   |> fill(usePrevious: true)
-  |> difference(nonNegative: true)
   |> keep(columns: ["_time","_value"])
   |> sort(columns: ["_time"])'''
 
         import_result = query_api.query(flux_for("Grid_Consumption_Total"))
         export_result = query_api.query(flux_for("Grid_FeedIn_Total"))
 
-        # Parse results -> timestamp:value (kWh per bucket)
+        # Parse results -> timestamp:value (cumulative kWh per bucket)
         imp = {}
         exp = {}
         for table in import_result:
@@ -463,48 +462,78 @@ async def get_economics_data(range: str = "7d"):
             d = to_local_time(dt)
             return d.strftime("%Y-%m")
 
-        # Aggregate deltas by local bucket key
-        imp_by_key = {}
-        exp_by_key = {}
+        # Build expected keys and labels (rightmost current period)
         if range in ("7d", "1month"):
-            for t, v in imp.items():
-                k = day_key(t)
-                imp_by_key[k] = imp_by_key.get(k, 0.0) + v
-            for t, v in exp.items():
-                k = day_key(t)
-                exp_by_key[k] = exp_by_key.get(k, 0.0) + v
-            # Expected last N days ending today (inclusive)
-            days = [ (now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(points_expected-1, -1, -1) ]
-            labels = [ datetime.strptime(d, "%Y-%m-%d").strftime(label_fmt) for d in days ]
-            ts_keys = days
-        else:  # 1year -> last 12 months ending current month
-            for t, v in imp.items():
-                k = month_key(t)
-                imp_by_key[k] = imp_by_key.get(k, 0.0) + v
-            for t, v in exp.items():
-                k = month_key(t)
-                exp_by_key[k] = exp_by_key.get(k, 0.0) + v
-            # Generate year-month keys
-            ym_keys = []
-            y = now_local.year
-            m = now_local.month
+            # Last N days inclusive of today
+            ts_keys = [ (now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(points_expected-1, -1, -1) ]
+            labels = [ datetime.strptime(k, "%Y-%m-%d").strftime(label_fmt) for k in ts_keys ]
+            # Map cumulative per day (take last value in that day)
+            def latest_per_day(dmap):
+                agg = {}
+                for t, v in dmap.items():
+                    k = day_key(t)
+                    # keep the max time (latest) per day
+                    lt = agg.get(k, (None, 0))[0]
+                    if lt is None or to_local_time(t) > lt:
+                        agg[k] = (to_local_time(t), v)
+                return {k: v for k, (_, v) in agg.items()}
+            imp_cum = latest_per_day(imp)
+            exp_cum = latest_per_day(exp)
+            # Compute deltas per consecutive day key
+            def deltas(keys, cum):
+                vals = []
+                prev = None
+                for k in keys:
+                    cur = cum.get(k, prev if prev is not None else 0.0)
+                    if prev is None:
+                        vals.append(0.0)
+                    else:
+                        vals.append(max(0.0, cur - prev))
+                    prev = cur
+                return vals
+            imp_vals = deltas(ts_keys, imp_cum)
+            exp_vals = deltas(ts_keys, exp_cum)
+        else:
+            # Last 12 months inclusive of current month
+            y = now_local.year; m = now_local.month
+            ts_keys = []
             for _ in range(points_expected):
-                ym_keys.append(f"{y:04d}-{m:02d}")
+                ts_keys.append(f"{y:04d}-{m:02d}")
                 m -= 1
                 if m == 0:
-                    m = 12
-                    y -= 1
-            ym_keys.reverse()
-            ts_keys = ym_keys
-            labels = []
-            for key in ts_keys:
-                labels.append(datetime.strptime(key, "%Y-%m").strftime(label_fmt))
+                    m = 12; y -= 1
+            ts_keys.reverse()
+            labels = [ datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys ]
+            # Latest cumulative per month
+            def latest_per_month(dmap):
+                agg = {}
+                for t, v in dmap.items():
+                    k = month_key(t)
+                    lt = agg.get(k, (None, 0))[0]
+                    if lt is None or to_local_time(t) > lt:
+                        agg[k] = (to_local_time(t), v)
+                return {k: v for k, (_, v) in agg.items()}
+            imp_cum = latest_per_month(imp)
+            exp_cum = latest_per_month(exp)
+            def deltas_month(keys, cum):
+                vals = []
+                prev = None
+                for k in keys:
+                    cur = cum.get(k, prev if prev is not None else 0.0)
+                    if prev is None:
+                        vals.append(0.0)
+                    else:
+                        vals.append(max(0.0, cur - prev))
+                    prev = cur
+                return vals
+            imp_vals = deltas_month(ts_keys, imp_cum)
+            exp_vals = deltas_month(ts_keys, exp_cum)
 
         # Monetary calculation aligned to expected keys
         import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))
         export_price = float(os.getenv("FEEDIN_PRICE_PER_KWH", "0.0604"))
-        import_costs = [round(imp_by_key.get(k, 0.0) * import_price, 2) for k in ts_keys]
-        export_income = [round(exp_by_key.get(k, 0.0) * export_price, 2) for k in ts_keys]
+        import_costs = [round(val * import_price, 2) for val in imp_vals]
+        export_income = [round(val * export_price, 2) for val in exp_vals]
 
         return {"labels": labels, "import_costs": import_costs, "export_income": export_income, "range": range, "points": len(labels)}
     except Exception as e:
