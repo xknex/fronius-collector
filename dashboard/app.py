@@ -434,6 +434,7 @@ async def get_economics_data(range: str = "7d"):
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "{field}")
   |> aggregateWindow(every: {window}, fn: last, createEmpty: true)
+  |> fill(usePrevious: true)
   |> difference(nonNegative: true)
   |> keep(columns: ["_time","_value"])
   |> sort(columns: ["_time"])'''
