@@ -874,14 +874,18 @@
                 else if (dir === 'import') { gridTrend.textContent = 'Import'; gridTrend.classList.add('trend--import'); }
                 else { gridTrend.textContent = 'Idle'; gridTrend.classList.add('trend--idle'); }
 
-                // Update Battery SOC
+                // Update Battery status using actual power flow
                 document.querySelector('.battery .metric-value').textContent = metrics.battery.toFixed(1);
                 const batteryTrend = document.querySelector('.battery .metric-trend');
-                batteryTrend.classList.remove('trend--success','trend--charge','trend--discharge','trend--warn');
-                if (metrics.battery > 80) { batteryTrend.textContent = 'Well charged'; batteryTrend.classList.add('trend--success'); }
-                else if (metrics.battery > 50) { batteryTrend.textContent = 'Charging'; batteryTrend.classList.add('trend--charge'); }
-                else if (metrics.battery > 20) { batteryTrend.textContent = 'Discharging'; batteryTrend.classList.add('trend--discharge'); }
-                else { batteryTrend.textContent = 'Low charge'; batteryTrend.classList.add('trend--warn'); }
+                const chg = Number(data.battery_charging || 0);
+                const dchg = Number(data.battery_discharging || 0);
+                const soc = Number(metrics.battery || 0);
+                const EPS = 0.01; // 10 W threshold
+                batteryTrend.classList.remove('trend--success','trend--charge','trend--discharge','trend--warn','trend--idle');
+                if (chg > EPS) { batteryTrend.textContent = 'Charging'; batteryTrend.classList.add('trend--charge'); }
+                else if (dchg > EPS) { batteryTrend.textContent = 'Discharging'; batteryTrend.classList.add('trend--discharge'); }
+                else if (soc >= 99) { batteryTrend.textContent = 'Full'; batteryTrend.classList.add('trend--success'); }
+                else { batteryTrend.textContent = 'Idle'; batteryTrend.classList.add('trend--idle'); }
 
                 // Update Autonomy
                 const allCards = document.querySelectorAll('.metric-card');

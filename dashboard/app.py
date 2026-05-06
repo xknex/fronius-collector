@@ -243,10 +243,10 @@ async def get_current_data():
     
     try:
         # Query latest values for key fields
-        query = f'''from(bucket: "{INFLUX_BUCKET}")
+          query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: -1h)
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Grid_FeedIn_Current" or r["_field"] == "Battery_SOC" or r["_field"] == "Autonomy_Percentage" or r["_field"] == "Grid_Consumption_Current")
+      |> filter(fn: (r) => r["_field"] == "Solar_Produced_Current" or r["_field"] == "Consumption_Current" or r["_field"] == "Grid_FeedIn_Current" or r["_field"] == "Battery_SOC" or r["_field"] == "Autonomy_Percentage" or r["_field"] == "Grid_Consumption_Current" or r["_field"] == "Battery_Charging" or r["_field"] == "Battery_Discharging")
   |> last()
 '''
         
@@ -270,6 +270,10 @@ async def get_current_data():
                     data["autonomy"] = value
                 elif field == "Grid_Consumption_Current":
                     data["grid_consumption"] = value
+                elif field == "Battery_Charging":
+                    data["battery_charging"] = value
+                elif field == "Battery_Discharging":
+                    data["battery_discharging"] = value
         
         # Calculate efficiency (solar production / consumption if available)
         if "solar_production" in data and "consumption" in data and data["consumption"] > 0:
