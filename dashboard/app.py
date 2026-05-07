@@ -128,6 +128,9 @@ def to_local_time(dt):
 # Track app startup time for uptime calculation
 APP_START_TIME = time.time()
 
+# Preserve built-in range() for use inside endpoints where the parameter name shadows it
+builtins_range = range
+
 app = FastAPI(title="Fronius Dashboard")
 
 # Add CORS middleware
@@ -478,68 +481,107 @@ async def get_economics_data(range: str = "7d"):
     - 1month: last 30 days (rightmost = today)
     - 1year: last 12 months (rightmost = current month)
     """
-    # Avoid shadowing Python's built-in range()
     time_range = range
     
     if query_api is None:
         return {"error": "InfluxDB not connected"}
 
     cfg = {
-        "7d":     {"start": "-7d",   "window": "1d",  "points": 7,  "label": "%a"},
-        "1month": {"start": "-30d",  "window": "1d",  "points": 30, "label": "%d.%m."},
-        "1year":  {"start": "-365d", "window": "1mo", "points": 12, "label": "%b %Y"},
+        "7d":     {"start": "-8d",   "points": 7,  "label": "%a",     "bucket": "day"},
+        "1month": {"start": "-31d",  "points": 30, "label": "%d.%m.", "bucket": "day"},
+        "1year":  {"start": "-366d", "points": 12, "label": "%b %Y",  "bucket": "month"},
     }
     if time_range not in cfg:
         return {"error": f"Invalid range. Supported: {', '.join(cfg.keys())}"}
 
     start = cfg[time_range]["start"]
-    window = cfg[time_range]["window"]
+    bucket_type = cfg[time_range]["bucket"]
+    points_expected = cfg[time_range]["points"]
     label_fmt = cfg[time_range]["label"]
 
     try:
-        # Use spread() to get the actual energy delta per window from cumulative counters.
-        # spread() = max - min per window, which gives daily/monthly consumption/export in kWh.
+        # Query raw cumulative values — no aggregateWindow, we'll bucket by local time in Python
         def flux_for(field: str) -> str:
             return f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: {start})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "{field}")
-  |> aggregateWindow(every: {window}, fn: spread, createEmpty: true)
-  |> fill(value: 0.0)
   |> keep(columns: ["_time","_value"])
   |> sort(columns: ["_time"])'''
 
         import_result = query_api.query(flux_for("Grid_Consumption_Total"))
         export_result = query_api.query(flux_for("Grid_FeedIn_Total"))
 
-        # Parse results into ordered lists of (timestamp, value)
-        imp_points = []
-        exp_points = []
-        for table in import_result:
-            for rec in table.records:
-                imp_points.append((rec.get_time(), max(0.0, float(rec.get_value() or 0))))
-        for table in export_result:
-            for rec in table.records:
-                exp_points.append((rec.get_time(), max(0.0, float(rec.get_value() or 0))))
+        # Parse into list of (local_time, value)
+        def parse_results(tables):
+            points = []
+            for table in tables:
+                for rec in table.records:
+                    val = rec.get_value()
+                    if val is not None:
+                        points.append((to_local_time(rec.get_time()), float(val)))
+            return points
 
-        logger.info(f"Economics query range={time_range}: imp has {len(imp_points)} points, exp has {len(exp_points)} points")
+        imp_points = parse_results(import_result)
+        exp_points = parse_results(export_result)
 
-        # Build labels from the actual timestamps returned by Flux
-        def format_label(dt):
-            local_dt = to_local_time(dt)
-            return local_dt.strftime(label_fmt)
+        logger.info(f"Economics query range={time_range}: imp has {len(imp_points)} raw points, exp has {len(exp_points)} raw points")
 
-        # Use import_points timestamps as reference (both queries use same windows)
-        labels = [format_label(t) for t, _ in imp_points]
-        imp_vals = [v for _, v in imp_points]
-        exp_vals = [v for _, v in exp_points]
+        now_local = to_local_time(datetime.now(timezone.utc))
 
-        # If export has fewer points, pad with zeros
-        while len(exp_vals) < len(imp_vals):
-            exp_vals.append(0.0)
-        while len(imp_vals) < len(exp_vals):
-            imp_vals.append(0.0)
-            labels.append("")
+        # Build expected bucket keys (local time based)
+        if bucket_type == "day":
+            ts_keys = [(now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d")
+                       for i in reversed(builtins_range(points_expected))]
+            labels = [datetime.strptime(k, "%Y-%m-%d").strftime(label_fmt) for k in ts_keys]
+
+            def day_key(dt):
+                return dt.strftime("%Y-%m-%d")
+
+            # For each day bucket, compute spread (max - min of cumulative counter)
+            def compute_daily_spread(points):
+                buckets = {}
+                for dt, val in points:
+                    k = day_key(dt)
+                    if k not in buckets:
+                        buckets[k] = (val, val)  # (min, max)
+                    else:
+                        buckets[k] = (min(buckets[k][0], val), max(buckets[k][1], val))
+                return {k: mx - mn for k, (mn, mx) in buckets.items()}
+
+            imp_spread = compute_daily_spread(imp_points)
+            exp_spread = compute_daily_spread(exp_points)
+            imp_vals = [imp_spread.get(k, 0.0) for k in ts_keys]
+            exp_vals = [exp_spread.get(k, 0.0) for k in ts_keys]
+
+        else:  # month
+            y = now_local.year; m = now_local.month
+            ts_keys = []
+            for _ in builtins_range(points_expected):
+                ts_keys.append(f"{y:04d}-{m:02d}")
+                m -= 1
+                if m == 0:
+                    m = 12; y -= 1
+            ts_keys.reverse()
+            labels = [datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys]
+
+            def month_key(dt):
+                return dt.strftime("%Y-%m")
+
+            def compute_monthly_spread(points):
+                buckets = {}
+                for dt, val in points:
+                    k = month_key(dt)
+                    if k not in buckets:
+                        buckets[k] = (val, val)
+                    else:
+                        buckets[k] = (min(buckets[k][0], val), max(buckets[k][1], val))
+                return {k: mx - mn for k, (mn, mx) in buckets.items()}
+
+            imp_spread = compute_monthly_spread(imp_points)
+            exp_spread = compute_monthly_spread(exp_points)
+            imp_vals = [imp_spread.get(k, 0.0) for k in ts_keys]
+            exp_vals = [exp_spread.get(k, 0.0) for k in ts_keys]
 
         # Monetary calculation
         import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))
