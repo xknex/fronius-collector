@@ -802,6 +802,7 @@
         }
 
         let serverTimezone = 'UTC';  // Default timezone
+        let currencySymbol = '€';    // Default currency symbol
 
         // Fetch server timezone configuration
         async function initializeTimezone() {
@@ -814,6 +815,20 @@
                 }
             } catch (error) {
                 console.warn('Failed to fetch timezone config, using UTC:', error);
+            }
+        }
+
+        // Fetch economics configuration (prices and currency)
+        async function initializeEconomicsConfig() {
+            try {
+                const response = await fetch('/api/config/economics');
+                const data = await response.json();
+                if (data.currency_symbol) {
+                    currencySymbol = data.currency_symbol;
+                    console.log(`Currency: ${currencySymbol} (import: ${data.import_price}, export: ${data.export_price})`);
+                }
+            } catch (error) {
+                console.warn('Failed to fetch economics config:', error);
             }
         }
 
@@ -975,13 +990,28 @@
                     return;
                 }
 
+                // Update currency symbol from API response
+                if (data.currency_symbol) {
+                    currencySymbol = data.currency_symbol;
+                }
+
                 // Update economics chart
                 if (economicsChart) {
                     console.log(`[updateEconomicsChart] Updating chart with ${data.labels?.length || 0} labels`);
                     economicsChart.data.labels = data.labels || [];
                     economicsChart.data.datasets[0].data = data.import_costs || [];
+                    economicsChart.data.datasets[0].label = `Import Cost (${currencySymbol})`;
                     economicsChart.data.datasets[1].data = data.export_income || [];
-                    economicsChart.update('none');
+                    economicsChart.data.datasets[1].label = `Export Income (${currencySymbol})`;
+                    
+                    // Store kWh data for tooltips
+                    economicsChart.data.datasets[0]._kwh = data.import_kwh || [];
+                    economicsChart.data.datasets[1]._kwh = data.export_kwh || [];
+                    
+                    // Update y-axis title with currency
+                    economicsChart.options.scales.y.title.text = `Amount (${currencySymbol})`;
+                    
+                    economicsChart.update();
                 } else {
                     console.error('[updateEconomicsChart] economicsChart is not initialized');
                 }
@@ -1144,13 +1174,13 @@
                     labels: [],
                     datasets: [
                         {
-                            label: 'Import Cost (€)',
+                            label: `Import Cost (${currencySymbol})`,
                             data: [],
                             backgroundColor: '#ff006e',
                             borderRadius: 5
                         },
                         {
-                            label: 'Export Income (€)',
+                            label: `Export Income (${currencySymbol})`,
                             data: [],
                             backgroundColor: '#00ff88',
                             borderRadius: 5
@@ -1162,15 +1192,36 @@
                     maintainAspectRatio: false,
                     indexAxis: 'x',
                     scales: {
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 15
+                            }
+                        },
                         y: {
                             beginAtZero: true,
-                            title: { display: true, text: 'Amount (€)' }
+                            title: { display: true, text: `Amount (${currencySymbol})` }
                         }
                     },
                     plugins: {
                         legend: {
                             display: true,
                             position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y || 0;
+                                    const kwh = context.dataset._kwh ? context.dataset._kwh[context.dataIndex] : null;
+                                    let label = `${context.dataset.label}: ${value.toFixed(2)} ${currencySymbol}`;
+                                    if (kwh !== null && kwh !== undefined) {
+                                        label += ` (${kwh.toFixed(1)} kWh)`;
+                                    }
+                                    return label;
+                                }
+                            }
                         }
                     }
                 }
@@ -1211,8 +1262,9 @@
 
         // Initialize on page load
         (async function() {
-            // Initialize timezone first
+            // Initialize timezone and economics config first
             await initializeTimezone();
+            await initializeEconomicsConfig();
             
             // Then start updating timestamps
             updateTimestamp();

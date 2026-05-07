@@ -272,6 +272,18 @@ async def get_timezone_config():
         "server_time": to_local_time(datetime.now(timezone.utc)).isoformat()
     }
 
+@app.get("/api/config/economics")
+async def get_economics_config():
+    """Get economics configuration (prices and currency) for frontend display."""
+    return {
+        "import_price": float(os.getenv("GRID_PRICE_PER_KWH", "0.27")),
+        "export_price": float(os.getenv("FEEDIN_PRICE_PER_KWH", "0.0604")),
+        "currency": os.getenv("CURRENCY", "EUR"),
+        "currency_symbol": {"EUR": "€", "USD": "$", "GBP": "£", "CHF": "CHF"}.get(
+            os.getenv("CURRENCY", "EUR"), os.getenv("CURRENCY", "EUR")
+        )
+    }
+
 @app.get("/api/debug/timezone")
 async def debug_timezone():
     """Debug endpoint to show timezone conversion."""
@@ -470,9 +482,9 @@ async def get_economics_data(range: str = "7d"):
         return {"error": "InfluxDB not connected"}
 
     cfg = {
-        "7d":     {"start": "-8d",  "window": "1d",  "points": 7,  "label": "%a"},
-        "1month": {"start": "-35d", "window": "1d",  "points": 30, "label": "%d"},
-        "1year":  {"start": "-13mo","window": "1mo", "points": 12, "label": "%b"},
+        "7d":     {"start": "-8d",   "window": "1d",  "points": 7,  "label": "%a"},
+        "1month": {"start": "-35d",  "window": "1d",  "points": 30, "label": "%d.%m."},
+        "1year":  {"start": "-395d", "window": "1d",  "points": 12, "label": "%b %Y"},
     }
     if range not in cfg:
         return {"error": f"Invalid range. Supported: {', '.join(cfg.keys())}"}
@@ -506,6 +518,8 @@ async def get_economics_data(range: str = "7d"):
         for table in export_result:
             for rec in table.records:
                 exp[rec.get_time()] = max(0.0, float(rec.get_value() or 0))
+
+        logger.info(f"Economics query range={range}: imp has {len(imp)} points, exp has {len(exp)} points")
 
         # Build expected local-time buckets to avoid timezone drift duplicates
         now_local = to_local_time(datetime.now(timezone.utc))
@@ -560,7 +574,7 @@ async def get_economics_data(range: str = "7d"):
                     m = 12; y -= 1
             ts_keys.reverse()
             labels = [ datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys ]
-            # Latest cumulative per month
+            # Latest cumulative per month (aggregate daily data into months)
             def latest_per_month(dmap):
                 agg = {}
                 for t, v in dmap.items():
@@ -588,10 +602,26 @@ async def get_economics_data(range: str = "7d"):
         # Monetary calculation aligned to expected keys
         import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))
         export_price = float(os.getenv("FEEDIN_PRICE_PER_KWH", "0.0604"))
+        currency_symbol = {"EUR": "€", "USD": "$", "GBP": "£", "CHF": "CHF"}.get(
+            os.getenv("CURRENCY", "EUR"), os.getenv("CURRENCY", "EUR")
+        )
         import_costs = [round(val * import_price, 2) for val in imp_vals]
         export_income = [round(val * export_price, 2) for val in exp_vals]
 
-        return {"labels": labels, "import_costs": import_costs, "export_income": export_income, "range": range, "points": len(labels)}
+        logger.info(f"Economics result range={range}: labels={labels}, import_costs={import_costs}, export_income={export_income}")
+
+        return {
+            "labels": labels,
+            "import_costs": import_costs,
+            "export_income": export_income,
+            "import_kwh": [round(v, 2) for v in imp_vals],
+            "export_kwh": [round(v, 2) for v in exp_vals],
+            "import_price": import_price,
+            "export_price": export_price,
+            "currency_symbol": currency_symbol,
+            "range": range,
+            "points": len(labels)
+        }
     except Exception as e:
         logger.error(f"Error querying economics data for range {range}: {e}", exc_info=True)
         return {"error": str(e)}
