@@ -128,9 +128,6 @@ def to_local_time(dt):
 # Track app startup time for uptime calculation
 APP_START_TIME = time.time()
 
-# Preserve built-in range() since FastAPI parameter 'range' shadows it in endpoint functions
-builtins_range = range
-
 app = FastAPI(title="Fronius Dashboard")
 
 # Add CORS middleware
@@ -488,132 +485,63 @@ async def get_economics_data(range: str = "7d"):
         return {"error": "InfluxDB not connected"}
 
     cfg = {
-        "7d":     {"start": "-8d",   "window": "1d",  "points": 7,  "label": "%a"},
-        "1month": {"start": "-35d",  "window": "1d",  "points": 30, "label": "%d.%m."},
-        "1year":  {"start": "-395d", "window": "1d",  "points": 12, "label": "%b %Y"},
+        "7d":     {"start": "-7d",   "window": "1d",  "points": 7,  "label": "%a"},
+        "1month": {"start": "-30d",  "window": "1d",  "points": 30, "label": "%d.%m."},
+        "1year":  {"start": "-365d", "window": "1mo", "points": 12, "label": "%b %Y"},
     }
     if time_range not in cfg:
         return {"error": f"Invalid range. Supported: {', '.join(cfg.keys())}"}
 
     start = cfg[time_range]["start"]
     window = cfg[time_range]["window"]
-    points_expected = cfg[time_range]["points"]
     label_fmt = cfg[time_range]["label"]
 
     try:
-        # Fetch windowed cumulative totals (filled), we'll compute deltas in Python
+        # Use spread() to get the actual energy delta per window from cumulative counters.
+        # spread() = max - min per window, which gives daily/monthly consumption/export in kWh.
         def flux_for(field: str) -> str:
             return f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: {start})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "{field}")
-  |> aggregateWindow(every: {window}, fn: last, createEmpty: true)
-  |> fill(usePrevious: true)
+  |> aggregateWindow(every: {window}, fn: spread, createEmpty: true)
+  |> fill(value: 0.0)
   |> keep(columns: ["_time","_value"])
   |> sort(columns: ["_time"])'''
 
         import_result = query_api.query(flux_for("Grid_Consumption_Total"))
         export_result = query_api.query(flux_for("Grid_FeedIn_Total"))
 
-        # Parse results -> timestamp:value (cumulative kWh per bucket)
-        imp = {}
-        exp = {}
+        # Parse results into ordered lists of (timestamp, value)
+        imp_points = []
+        exp_points = []
         for table in import_result:
             for rec in table.records:
-                imp[rec.get_time()] = max(0.0, float(rec.get_value() or 0))
+                imp_points.append((rec.get_time(), max(0.0, float(rec.get_value() or 0))))
         for table in export_result:
             for rec in table.records:
-                exp[rec.get_time()] = max(0.0, float(rec.get_value() or 0))
+                exp_points.append((rec.get_time(), max(0.0, float(rec.get_value() or 0))))
 
-        logger.info(f"Economics query range={time_range}: imp has {len(imp)} points, exp has {len(exp)} points")
+        logger.info(f"Economics query range={time_range}: imp has {len(imp_points)} points, exp has {len(exp_points)} points")
 
-        # Build expected local-time buckets to avoid timezone drift duplicates
-        now_local = to_local_time(datetime.now(timezone.utc))
+        # Build labels from the actual timestamps returned by Flux
+        def format_label(dt):
+            local_dt = to_local_time(dt)
+            return local_dt.strftime(label_fmt)
 
-        def day_key(dt):
-            d = to_local_time(dt)
-            return d.strftime("%Y-%m-%d")
+        # Use import_points timestamps as reference (both queries use same windows)
+        labels = [format_label(t) for t, _ in imp_points]
+        imp_vals = [v for _, v in imp_points]
+        exp_vals = [v for _, v in exp_points]
 
-        def month_key(dt):
-            d = to_local_time(dt)
-            return d.strftime("%Y-%m")
+        # If export has fewer points, pad with zeros
+        while len(exp_vals) < len(imp_vals):
+            exp_vals.append(0.0)
+        while len(imp_vals) < len(exp_vals):
+            imp_vals.append(0.0)
+            labels.append("")
 
-        # Build expected keys and labels (rightmost current period)
-        if time_range in ("7d", "1month"):
-            # Last N days inclusive of today
-            ts_keys = [(now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d") for i in builtins_range(points_expected-1, -1, -1)]
-            labels = [datetime.strptime(k, "%Y-%m-%d").strftime(label_fmt) for k in ts_keys]
-            # Map cumulative per day (take last value in that day)
-            def latest_per_day(dmap):
-                agg = {}
-                for t, v in dmap.items():
-                    k = day_key(t)
-                    # keep the max time (latest) per day
-                    lt = agg.get(k, (None, 0))[0]
-                    if lt is None or to_local_time(t) > lt:
-                        agg[k] = (to_local_time(t), v)
-                return {k: v for k, (_, v) in agg.items()}
-            imp_cum = latest_per_day(imp)
-            exp_cum = latest_per_day(exp)
-            # Compute deltas per consecutive day key
-            def deltas(keys, cum):
-                vals = []
-                prev = None
-                for k in keys:
-                    if k not in cum:
-                        # No data for this day — show 0, don't update prev
-                        vals.append(0.0)
-                        continue
-                    cur = cum[k]
-                    if prev is None:
-                        # First day with data — no baseline to compare
-                        vals.append(0.0)
-                    else:
-                        vals.append(max(0.0, cur - prev))
-                    prev = cur
-                return vals
-            imp_vals = deltas(ts_keys, imp_cum)
-            exp_vals = deltas(ts_keys, exp_cum)
-        else:
-            # Last 12 months inclusive of current month
-            y = now_local.year; m = now_local.month
-            ts_keys = []
-            for _ in builtins_range(points_expected):
-                ts_keys.append(f"{y:04d}-{m:02d}")
-                m -= 1
-                if m == 0:
-                    m = 12; y -= 1
-            ts_keys.reverse()
-            labels = [datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys]
-            # Latest cumulative per month (aggregate daily data into months)
-            def latest_per_month(dmap):
-                agg = {}
-                for t, v in dmap.items():
-                    k = month_key(t)
-                    lt = agg.get(k, (None, 0))[0]
-                    if lt is None or to_local_time(t) > lt:
-                        agg[k] = (to_local_time(t), v)
-                return {k: v for k, (_, v) in agg.items()}
-            imp_cum = latest_per_month(imp)
-            exp_cum = latest_per_month(exp)
-            def deltas_month(keys, cum):
-                vals = []
-                prev = None
-                for k in keys:
-                    if k not in cum:
-                        vals.append(0.0)
-                        continue
-                    cur = cum[k]
-                    if prev is None:
-                        vals.append(0.0)
-                    else:
-                        vals.append(max(0.0, cur - prev))
-                    prev = cur
-                return vals
-            imp_vals = deltas_month(ts_keys, imp_cum)
-            exp_vals = deltas_month(ts_keys, exp_cum)
-
-        # Monetary calculation aligned to expected keys
+        # Monetary calculation
         import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))
         export_price = float(os.getenv("FEEDIN_PRICE_PER_KWH", "0.0604"))
         currency_symbol = {"EUR": "€", "USD": "$", "GBP": "£", "CHF": "CHF"}.get(
