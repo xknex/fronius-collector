@@ -128,6 +128,9 @@ def to_local_time(dt):
 # Track app startup time for uptime calculation
 APP_START_TIME = time.time()
 
+# Preserve built-in range() since FastAPI parameter 'range' shadows it in endpoint functions
+builtins_range = range
+
 app = FastAPI(title="Fronius Dashboard")
 
 # Add CORS middleware
@@ -478,6 +481,9 @@ async def get_economics_data(range: str = "7d"):
     - 1month: last 30 days (rightmost = today)
     - 1year: last 12 months (rightmost = current month)
     """
+    # Avoid shadowing Python's built-in range()
+    time_range = range
+    
     if query_api is None:
         return {"error": "InfluxDB not connected"}
 
@@ -486,13 +492,13 @@ async def get_economics_data(range: str = "7d"):
         "1month": {"start": "-35d",  "window": "1d",  "points": 30, "label": "%d.%m."},
         "1year":  {"start": "-395d", "window": "1d",  "points": 12, "label": "%b %Y"},
     }
-    if range not in cfg:
+    if time_range not in cfg:
         return {"error": f"Invalid range. Supported: {', '.join(cfg.keys())}"}
 
-    start = cfg[range]["start"]
-    window = cfg[range]["window"]
-    points_expected = cfg[range]["points"]
-    label_fmt = cfg[range]["label"]
+    start = cfg[time_range]["start"]
+    window = cfg[time_range]["window"]
+    points_expected = cfg[time_range]["points"]
+    label_fmt = cfg[time_range]["label"]
 
     try:
         # Fetch windowed cumulative totals (filled), we'll compute deltas in Python
@@ -519,7 +525,7 @@ async def get_economics_data(range: str = "7d"):
             for rec in table.records:
                 exp[rec.get_time()] = max(0.0, float(rec.get_value() or 0))
 
-        logger.info(f"Economics query range={range}: imp has {len(imp)} points, exp has {len(exp)} points")
+        logger.info(f"Economics query range={time_range}: imp has {len(imp)} points, exp has {len(exp)} points")
 
         # Build expected local-time buckets to avoid timezone drift duplicates
         now_local = to_local_time(datetime.now(timezone.utc))
@@ -533,10 +539,10 @@ async def get_economics_data(range: str = "7d"):
             return d.strftime("%Y-%m")
 
         # Build expected keys and labels (rightmost current period)
-        if range in ("7d", "1month"):
+        if time_range in ("7d", "1month"):
             # Last N days inclusive of today
-            ts_keys = [ (now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(points_expected-1, -1, -1) ]
-            labels = [ datetime.strptime(k, "%Y-%m-%d").strftime(label_fmt) for k in ts_keys ]
+            ts_keys = [(now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d") for i in builtins_range(points_expected-1, -1, -1)]
+            labels = [datetime.strptime(k, "%Y-%m-%d").strftime(label_fmt) for k in ts_keys]
             # Map cumulative per day (take last value in that day)
             def latest_per_day(dmap):
                 agg = {}
@@ -567,13 +573,13 @@ async def get_economics_data(range: str = "7d"):
             # Last 12 months inclusive of current month
             y = now_local.year; m = now_local.month
             ts_keys = []
-            for _ in range(points_expected):
+            for _ in builtins_range(points_expected):
                 ts_keys.append(f"{y:04d}-{m:02d}")
                 m -= 1
                 if m == 0:
                     m = 12; y -= 1
             ts_keys.reverse()
-            labels = [ datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys ]
+            labels = [datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys]
             # Latest cumulative per month (aggregate daily data into months)
             def latest_per_month(dmap):
                 agg = {}
@@ -608,7 +614,7 @@ async def get_economics_data(range: str = "7d"):
         import_costs = [round(val * import_price, 2) for val in imp_vals]
         export_income = [round(val * export_price, 2) for val in exp_vals]
 
-        logger.info(f"Economics result range={range}: labels={labels}, import_costs={import_costs}, export_income={export_income}")
+        logger.info(f"Economics result range={time_range}: labels={labels}, import_costs={import_costs}, export_income={export_income}")
 
         return {
             "labels": labels,
@@ -619,11 +625,11 @@ async def get_economics_data(range: str = "7d"):
             "import_price": import_price,
             "export_price": export_price,
             "currency_symbol": currency_symbol,
-            "range": range,
+            "range": time_range,
             "points": len(labels)
         }
     except Exception as e:
-        logger.error(f"Error querying economics data for range {range}: {e}", exc_info=True)
+        logger.error(f"Error querying economics data for range {time_range}: {e}", exc_info=True)
         return {"error": str(e)}
 
 @app.get("/api/data/7d")
