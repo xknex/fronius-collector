@@ -560,8 +560,13 @@ async def get_economics_data(range: str = "7d"):
                 vals = []
                 prev = None
                 for k in keys:
-                    cur = cum.get(k, prev if prev is not None else 0.0)
+                    if k not in cum:
+                        # No data for this day — show 0, don't update prev
+                        vals.append(0.0)
+                        continue
+                    cur = cum[k]
                     if prev is None:
+                        # First day with data — no baseline to compare
                         vals.append(0.0)
                     else:
                         vals.append(max(0.0, cur - prev))
@@ -595,7 +600,10 @@ async def get_economics_data(range: str = "7d"):
                 vals = []
                 prev = None
                 for k in keys:
-                    cur = cum.get(k, prev if prev is not None else 0.0)
+                    if k not in cum:
+                        vals.append(0.0)
+                        continue
+                    cur = cum[k]
                     if prev is None:
                         vals.append(0.0)
                     else:
