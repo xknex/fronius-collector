@@ -25,6 +25,9 @@ RUN pip install --no-cache-dir -r dashboard/requirements.txt
 # Copy collector script
 COPY collector_docker.py .
 
+# Copy aggregator script
+COPY aggregator.py .
+
 # Create log directory
 RUN mkdir -p /app/logs
 

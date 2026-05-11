@@ -1,3 +1,5 @@
 .env
 apidoc.pdf
 __pycache__/
+.kiro/
+.kiro/*

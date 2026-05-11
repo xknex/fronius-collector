@@ -472,6 +472,83 @@ async def get_24h_data():
     """Get 24-hour historical data for power flow chart. (Legacy endpoint - use /api/data/power?range=24h)"""
     return await get_power_data(range="24h")
 
+def get_today_partial() -> dict:
+    """Compute today's partial kWh values from raw data using a two-point query.
+
+    Queries fronius_clean for the first and last value of Grid_Consumption_Total
+    and Grid_FeedIn_Total since local midnight (converted to UTC). Returns the
+    delta (last - first) as grid_import_kwh and grid_export_kwh.
+
+    Returns:
+        dict with keys grid_import_kwh (float) and grid_export_kwh (float).
+        Returns zeros if no data is available.
+    """
+    default = {"grid_import_kwh": 0.0, "grid_export_kwh": 0.0}
+
+    if query_api is None:
+        return default
+
+    try:
+        # Calculate today's start: local midnight converted to UTC
+        now_local = to_local_time(datetime.now(timezone.utc))
+        if LOCAL_TZ:
+            local_midnight = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            local_midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        today_start_utc = local_midnight.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Query first values of today
+        query_first = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: {today_start_utc})
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total" or r["_field"] == "Grid_FeedIn_Total")
+  |> first()'''
+
+        # Query last (latest) values of today
+        query_last = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: {today_start_utc})
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total" or r["_field"] == "Grid_FeedIn_Total")
+  |> last()'''
+
+        result_first = query_api.query(query_first)
+        result_last = query_api.query(query_last)
+
+        # Parse first values
+        first_values = {}
+        for table in result_first:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field and value is not None:
+                    first_values[field] = float(value)
+
+        # Parse last values
+        last_values = {}
+        for table in result_last:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field and value is not None:
+                    last_values[field] = float(value)
+
+        # Need both first and last for both fields to compute deltas
+        if not first_values or not last_values:
+            return default
+
+        grid_import_kwh = last_values.get("Grid_Consumption_Total", 0.0) - first_values.get("Grid_Consumption_Total", 0.0)
+        grid_export_kwh = last_values.get("Grid_FeedIn_Total", 0.0) - first_values.get("Grid_FeedIn_Total", 0.0)
+
+        return {
+            "grid_import_kwh": max(grid_import_kwh, 0.0),
+            "grid_export_kwh": max(grid_export_kwh, 0.0),
+        }
+    except Exception as e:
+        logger.error(f"Error computing today's partial data: {e}", exc_info=True)
+        return default
+
+
 @app.get("/api/data/economics")
 async def get_economics_data(range: str = "7d"):
     """Return import costs and export income bars with stable labels.
@@ -480,80 +557,99 @@ async def get_economics_data(range: str = "7d"):
     - 7d: last 7 days (rightmost = today)
     - 1month: last 30 days (rightmost = today)
     - 1year: last 12 months (rightmost = current month)
+
+    Queries pre-aggregated measurements (fronius_agg_daily / fronius_agg_monthly)
+    for fast response times instead of scanning millions of raw data points.
     """
     time_range = range
     
     if query_api is None:
         return {"error": "InfluxDB not connected"}
 
+    # Configurable measurement prefix (default: "fronius_agg")
+    AGG_PREFIX = os.getenv("AGGREGATION_MEASUREMENT_PREFIX", "fronius_agg")
+
     cfg = {
-        "7d":     {"start": "-8d",   "points": 7,  "label": "%a",     "bucket": "day"},
-        "1month": {"start": "-31d",  "points": 30, "label": "%d.%m.", "bucket": "day"},
-        "1year":  {"start": "-366d", "points": 12, "label": "%b %Y",  "bucket": "month"},
+        "7d":     {"range_days": 8,   "points": 7,  "label": "%a",     "bucket": "day"},
+        "1month": {"range_days": 31,  "points": 30, "label": "%d.%m.", "bucket": "day"},
+        "1year":  {"range_days": 366, "points": 12, "label": "%b %Y",  "bucket": "month"},
     }
     if time_range not in cfg:
         return {"error": f"Invalid range. Supported: {', '.join(cfg.keys())}"}
 
-    start = cfg[time_range]["start"]
+    range_days = cfg[time_range]["range_days"]
     bucket_type = cfg[time_range]["bucket"]
     points_expected = cfg[time_range]["points"]
     label_fmt = cfg[time_range]["label"]
 
     try:
-        # Query raw cumulative values — no aggregateWindow, we'll bucket by local time in Python
-        def flux_for(field: str) -> str:
-            return f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: {start})
-  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => r["_field"] == "{field}")
-  |> keep(columns: ["_time","_value"])
+        # Determine which aggregated measurement to query
+        if bucket_type == "day":
+            measurement = f"{AGG_PREFIX}_daily"
+        else:
+            measurement = f"{AGG_PREFIX}_monthly"
+
+        # Query pre-aggregated data
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -{range_days}d)
+  |> filter(fn: (r) => r["_measurement"] == "{measurement}")
+  |> filter(fn: (r) => r["_field"] == "grid_import_kwh" or r["_field"] == "grid_export_kwh")
   |> sort(columns: ["_time"])'''
 
-        import_result = query_api.query(flux_for("Grid_Consumption_Total"))
-        export_result = query_api.query(flux_for("Grid_FeedIn_Total"))
+        agg_result = query_api.query(query)
 
-        # Parse into list of (local_time, value)
-        def parse_results(tables):
-            points = []
-            for table in tables:
-                for rec in table.records:
-                    val = rec.get_value()
-                    if val is not None:
-                        points.append((to_local_time(rec.get_time()), float(val)))
-            return points
+        # Parse aggregated results into dict keyed by timestamp
+        # Each record has _time, _field, _value
+        import_by_key = {}
+        export_by_key = {}
 
-        imp_points = parse_results(import_result)
-        exp_points = parse_results(export_result)
+        for table in agg_result:
+            for rec in table.records:
+                val = rec.get_value()
+                if val is None:
+                    continue
+                ts = rec.get_time()
+                local_ts = to_local_time(ts)
+                field = rec.values.get("_field")
 
-        logger.info(f"Economics query range={time_range}: imp has {len(imp_points)} raw points, exp has {len(exp_points)} raw points")
+                if bucket_type == "day":
+                    key = local_ts.strftime("%Y-%m-%d")
+                else:
+                    key = local_ts.strftime("%Y-%m")
+
+                if field == "grid_import_kwh":
+                    import_by_key[key] = float(val)
+                elif field == "grid_export_kwh":
+                    export_by_key[key] = float(val)
+
+        # Fallback strategy: if aggregated measurements are empty (e.g. before
+        # backfill completes), we return zeros — NOT the slow raw query.
+        # The .get(k, 0.0) pattern below handles this gracefully.
+        logger.info(f"Economics agg query range={time_range}: measurement={measurement}, "
+                    f"import keys={len(import_by_key)}, export keys={len(export_by_key)}")
 
         now_local = to_local_time(datetime.now(timezone.utc))
 
-        # Build expected bucket keys (local time based)
+        # Add today's partial data for the current bucket
+        if bucket_type == "day":
+            today_key = now_local.date().strftime("%Y-%m-%d")
+            today_partial = get_today_partial()
+            # Override or add today's values (today won't have aggregated data yet)
+            import_by_key[today_key] = today_partial["grid_import_kwh"]
+            export_by_key[today_key] = today_partial["grid_export_kwh"]
+        else:
+            # For 1year range, add today's partial to current month
+            current_month_key = now_local.strftime("%Y-%m")
+            today_partial = get_today_partial()
+            # Add to existing monthly value (if month has aggregated data) or set it
+            import_by_key[current_month_key] = import_by_key.get(current_month_key, 0.0) + today_partial["grid_import_kwh"]
+            export_by_key[current_month_key] = export_by_key.get(current_month_key, 0.0) + today_partial["grid_export_kwh"]
+
+        # Build expected bucket keys and labels (local time based)
         if bucket_type == "day":
             ts_keys = [(now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d")
                        for i in reversed(builtins_range(points_expected))]
             labels = [datetime.strptime(k, "%Y-%m-%d").strftime(label_fmt) for k in ts_keys]
-
-            def day_key(dt):
-                return dt.strftime("%Y-%m-%d")
-
-            # For each day bucket, compute spread (max - min of cumulative counter)
-            def compute_daily_spread(points):
-                buckets = {}
-                for dt, val in points:
-                    k = day_key(dt)
-                    if k not in buckets:
-                        buckets[k] = (val, val)  # (min, max)
-                    else:
-                        buckets[k] = (min(buckets[k][0], val), max(buckets[k][1], val))
-                return {k: mx - mn for k, (mn, mx) in buckets.items()}
-
-            imp_spread = compute_daily_spread(imp_points)
-            exp_spread = compute_daily_spread(exp_points)
-            imp_vals = [imp_spread.get(k, 0.0) for k in ts_keys]
-            exp_vals = [exp_spread.get(k, 0.0) for k in ts_keys]
-
         else:  # month
             y = now_local.year; m = now_local.month
             ts_keys = []
@@ -565,23 +661,9 @@ async def get_economics_data(range: str = "7d"):
             ts_keys.reverse()
             labels = [datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys]
 
-            def month_key(dt):
-                return dt.strftime("%Y-%m")
-
-            def compute_monthly_spread(points):
-                buckets = {}
-                for dt, val in points:
-                    k = month_key(dt)
-                    if k not in buckets:
-                        buckets[k] = (val, val)
-                    else:
-                        buckets[k] = (min(buckets[k][0], val), max(buckets[k][1], val))
-                return {k: mx - mn for k, (mn, mx) in buckets.items()}
-
-            imp_spread = compute_monthly_spread(imp_points)
-            exp_spread = compute_monthly_spread(exp_points)
-            imp_vals = [imp_spread.get(k, 0.0) for k in ts_keys]
-            exp_vals = [exp_spread.get(k, 0.0) for k in ts_keys]
+        # Map aggregated values to expected keys (0.0 for missing days/months)
+        imp_vals = [import_by_key.get(k, 0.0) for k in ts_keys]
+        exp_vals = [export_by_key.get(k, 0.0) for k in ts_keys]
 
         # Monetary calculation
         import_price = float(os.getenv("GRID_PRICE_PER_KWH", "0.27"))

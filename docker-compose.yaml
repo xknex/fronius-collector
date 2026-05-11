@@ -40,6 +40,29 @@ services:
       retries: 3
       start_period: 30s
 
+  aggregator:
+    image: fronius-collector-beta
+    container_name: fronius-aggregator
+    env_file:
+      - .env
+    environment:
+      INFLUX_URL: "http://influxdb2:8086"
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      TZ: ${TZ}
+      AGGREGATION_SCHEDULE_HOUR: ${AGGREGATION_SCHEDULE_HOUR:-0}
+      AGGREGATION_SCHEDULE_MINUTE: ${AGGREGATION_SCHEDULE_MINUTE:-15}
+    command: python /app/aggregator.py
+    depends_on:
+      - influxdb2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f aggregator.py >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   influxdb2:
     image: influxdb:2
     container_name: fronius-influxdb
