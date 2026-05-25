@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fronius Energy Dashboard — Variant A: Quiet Neutral</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            overflow-x: clip;
+        }
+
+        :root {
+            /* Surface tokens */
+            --color-bg: hsl(220, 10%, 11%);
+            --color-bg-card: hsl(220, 8%, 15%);
+            --color-border: hsl(220, 6%, 22%);
+            --color-border-hover: hsl(220, 6%, 30%);
+
+            /* Text tokens */
+            --color-text: hsl(220, 5%, 85%);
+            --color-text-muted: hsl(220, 4%, 55%);
+
+            /* Metric category tokens */
+            --color-solar: hsl(40, 45%, 55%);
+            --color-consumption: hsl(350, 40%, 55%);
+            --color-grid: hsl(200, 35%, 55%);
+            --color-battery: hsl(150, 35%, 50%);
+            --color-autonomy: hsl(270, 30%, 55%);
+
+            /* Semantic state tokens */
+            --color-success: hsl(145, 35%, 48%);
+            --color-warning: hsl(38, 45%, 52%);
+            --color-error: hsl(0, 40%, 52%);
+
+            /* Interactive tokens */
+            --color-btn-bg: hsl(220, 8%, 15%);
+            --color-btn-active: hsl(220, 8%, 22%);
+            --color-btn-text: hsl(220, 4%, 55%);
+
+            /* Elevation */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2);
+            --shadow-card-hover: 0 3px 6px rgba(0, 0, 0, 0.25);
+
+            /* Typography */
+            --font-body: 'Inter', system-ui, sans-serif;
+
+            /* Spacing (4px base) */
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+            --space-2xl: 40px;
+            --space-3xl: 48px;
+
+            /* Transitions */
+            --duration-fast: 150ms;
+            --duration-normal: 200ms;
+            --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--color-bg);
+            color: var(--color-text);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: var(--space-lg);
+        }
+
+        /* Header */
+        header {
+            background: var(--color-bg-card);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: var(--space-lg);
+            margin-bottom: var(--space-xl);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow-card);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-lg);
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--color-bg-card);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: border-color var(--duration-normal) var(--ease-out);
+            font-size: 13px;
+            color: var(--color-text-muted);
+        }
+
+        .status-indicator:hover {
+            border-color: var(--color-border-hover);
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--color-success);
+            border-radius: 50%;
+        }
+
+        .status-dot.warning {
+            background: var(--color-warning);
+        }
+
+        .status-dot.error {
+            background: var(--color-error);
+        }
+
+        .timestamp {
+            font-size: 13px;
+            color: var(--color-text-muted);
+        }
+
+        /* Metrics Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-md);
+            margin-bottom: var(--space-xl);
+        }
+
+        .metric-card {
+            background: var(--color-bg-card);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: var(--space-lg);
+            transition: transform var(--duration-normal) var(--ease-out),
+                        box-shadow var(--duration-normal) var(--ease-out);
+            box-shadow: var(--shadow-card);
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: var(--space-sm);
+        }
+
+        .metric-value {
+            font-size: 30px;
+            font-weight: 700;
+            margin-bottom: var(--space-xs);
+        }
+
+        .metric-value.solar { color: var(--color-solar); }
+        .metric-value.consumption { color: var(--color-consumption); }
+        .metric-value.grid { color: var(--color-grid); }
+        .metric-value.battery { color: var(--color-battery); }
+        .metric-value.autonomy { color: var(--color-autonomy); }
+
+        .metric-unit {
+            font-size: 13px;
+            color: var(--color-text-muted);
+            font-weight: 400;
+        }
+
+        .metric-status {
+            display: inline-block;
+            margin-top: var(--space-sm);
+            padding: var(--space-xs) var(--space-sm);
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+
+        .metric-status.active {
+            background: hsla(40, 45%, 55%, 0.12);
+            color: var(--color-solar);
+        }
+
+        .metric-status.consuming {
+            background: hsla(350, 40%, 55%, 0.12);
+            color: var(--color-consumption);
+        }
+
+        .metric-status.export {
+            background: hsla(200, 35%, 55%, 0.12);
+            color: var(--color-grid);
+        }
+
+        .metric-status.charging {
+            background: hsla(150, 35%, 50%, 0.12);
+            color: var(--color-battery);
+        }
+
+        .metric-status.excellent {
+            background: hsla(270, 30%, 55%, 0.12);
+            color: var(--color-autonomy);
+        }
+
+        .metric-status.idle {
+            background: hsla(220, 4%, 55%, 0.12);
+            color: var(--color-text-muted);
+        }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: var(--space-md);
+            margin-bottom: var(--space-xl);
+        }
+
+        .chart-card {
+            background: var(--color-bg-card);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: var(--space-lg);
+            box-shadow: var(--shadow-card);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-md);
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .timeframe-selector {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .timeframe-btn {
+            padding: var(--space-xs) var(--space-sm);
+            border: 1px solid var(--color-border);
+            background: var(--color-btn-bg);
+            color: var(--color-btn-text);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: var(--font-body);
+            transition: background var(--duration-fast) var(--ease-out),
+                        border-color var(--duration-fast) var(--ease-out);
+        }
+
+        .timeframe-btn:hover {
+            border-color: var(--color-border-hover);
+            color: var(--color-text);
+        }
+
+        .timeframe-btn.active {
+            background: var(--color-btn-active);
+            border-color: var(--color-border-hover);
+            color: var(--color-text);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        /* Status Grid */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--space-md);
+            margin-bottom: var(--space-xl);
+        }
+
+        .status-card {
+            background: var(--color-bg-card);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: var(--space-lg);
+            box-shadow: var(--shadow-card);
+        }
+
+        .status-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-bottom: var(--space-md);
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: var(--space-sm) 0;
+            border-bottom: 1px solid var(--color-border);
+            font-size: 13px;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            color: var(--color-text-muted);
+        }
+
+        .status-value {
+            color: var(--color-text);
+            font-weight: 500;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: var(--space-lg);
+            color: var(--color-text-muted);
+            font-size: 12px;
+            border-top: 1px solid var(--color-border);
+            margin-top: var(--space-xl);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--color-bg-card);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: var(--space-xl);
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-lg);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--color-text-muted);
+            font-size: 24px;
+            cursor: pointer;
+            transition: color var(--duration-fast) var(--ease-out);
+            font-family: var(--font-body);
+        }
+
+        .modal-close:hover {
+            color: var(--color-text);
+        }
+
+        .status-item-row {
+            display: flex;
+            justify-content: space-between;
+            padding: var(--space-sm) 0;
+            border-bottom: 1px solid var(--color-border);
+            font-size: 13px;
+        }
+
+        .status-item-row:last-child {
+            border-bottom: none;
+        }
+
+        .status-item-label {
+            color: var(--color-text-muted);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .status-item-value {
+            color: var(--color-text);
+            font-weight: 500;
+            text-align: right;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: var(--space-xs) var(--space-sm);
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-badge.ok {
+            background: hsla(145, 35%, 48%, 0.12);
+            color: var(--color-success);
+        }
+
+        .status-badge.warning {
+            background: hsla(38, 45%, 52%, 0.12);
+            color: var(--color-warning);
+        }
+
+        .status-badge.error {
+            background: hsla(0, 40%, 52%, 0.12);
+            color: var(--color-error);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            header {
+                flex-direction: column;
+                gap: var(--space-sm);
+                text-align: center;
+            }
+
+            .header-left {
+                flex-direction: column;
+                gap: var(--space-sm);
+            }
+
+            h1 {
+                font-size: 16px;
+            }
+
+            .metric-value {
+                font-size: 24px;
+            }
+
+            .metric-card {
+                padding: var(--space-md);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-left">
+                <h1>Fronius Energy Dashboard</h1>
+                <div class="status-indicator" id="statusIndicator" title="Click for system status">
+                    <span class="status-dot"></span>
+                    <span>System Status</span>
+                </div>
+            </div>
+            <div class="timestamp">06/15/2025, 02:34:12 PM</div>
+        </header>
+
+        <!-- Status Modal -->
+        <div class="modal" id="statusModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-title">System Status</div>
+                    <button class="modal-close" id="modalClose">&times;</button>
+                </div>
+                <div id="statusDetails">
+                    <div class="status-item-row">
+                        <span class="status-item-label">Database Connection</span>
+                        <span class="status-item-value">
+                            <span class="status-badge ok">connected</span>
+                        </span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">Database Latency</span>
+                        <span class="status-item-value">12ms</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">API Status</span>
+                        <span class="status-item-value">
+                            <span class="status-badge ok">operational</span>
+                        </span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">API Latency</span>
+                        <span class="status-item-value">3ms</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">System Uptime</span>
+                        <span class="status-item-value">4d 7h</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">Memory Usage</span>
+                        <span class="status-item-value">84 MB</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">Build Time</span>
+                        <span class="status-item-value">2025-06-10 09:15</span>
+                    </div>
+                    <div class="status-item-row">
+                        <span class="status-item-label">Git Commit</span>
+                        <span class="status-item-value">a3f8c2d @ main</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Solar Production</div>
+                <div class="metric-value solar">4.85</div>
+                <div class="metric-unit">kW</div>
+                <div class="metric-status active">Active</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Consumption</div>
+                <div class="metric-value consumption">2.31</div>
+                <div class="metric-unit">kW</div>
+                <div class="metric-status consuming">Active</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Grid Feed-In</div>
+                <div class="metric-value grid">1.92</div>
+                <div class="metric-unit">kW</div>
+                <div class="metric-status export">Feed-in</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Battery SOC</div>
+                <div class="metric-value battery">78.5</div>
+                <div class="metric-unit">%</div>
+                <div class="metric-status charging">Charging</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Autonomy</div>
+                <div class="metric-value autonomy">87</div>
+                <div class="metric-unit">%</div>
+                <div class="metric-status excellent">Excellent</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title">Power Flow</div>
+                    <div class="timeframe-selector">
+                        <button class="timeframe-btn" data-range="3h">3H</button>
+                        <button class="timeframe-btn active" data-range="12h">12H</button>
+                        <button class="timeframe-btn" data-range="24h">1D</button>
+                        <button class="timeframe-btn" data-range="7d">1W</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title">Grid Economics</div>
+                    <div class="timeframe-selector">
+                        <button class="timeframe-btn active" data-range="7d">7D</button>
+                        <button class="timeframe-btn" data-range="1month">1M</button>
+                        <button class="timeframe-btn" data-range="1year">1Y</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="economicsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title">Grid Balance</div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="gridChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Cards -->
+        <div class="status-grid">
+            <div class="status-card">
+                <div class="status-title">Today's Statistics</div>
+                <div class="status-item">
+                    <span class="status-label">Solar Production</span>
+                    <span class="status-value">28.4 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Total Consumption</span>
+                    <span class="status-value">14.2 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Export</span>
+                    <span class="status-value">11.8 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Import</span>
+                    <span class="status-value">0.6 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Battery Charged</span>
+                    <span class="status-value">5.2 kWh</span>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-title">System Health</div>
+                <div class="status-item">
+                    <span class="status-label">Inverter Temp</span>
+                    <span class="status-value">42°C</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Battery Temp</span>
+                    <span class="status-value">28°C</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">System Load</span>
+                    <span class="status-value">34%</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Last Update</span>
+                    <span class="status-value">Just now</span>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-title">Monthly Summary</div>
+                <div class="status-item">
+                    <span class="status-label">Solar Production</span>
+                    <span class="status-value">412 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Export</span>
+                    <span class="status-value">198 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Import</span>
+                    <span class="status-value">45 kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Self-Consumption</span>
+                    <span class="status-value">82%</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">CO₂ Avoided</span>
+                    <span class="status-value">156 kg</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Fronius GEN24 Energy Management System · Dashboard v2.0 · Connected to InfluxDB</p>
+        </div>
+    </div>
+
+    <script>
+        // Hardcoded mock data matching the API response shape
+        const mockData = {
+            solar_production: 4.85,
+            consumption: 2.31,
+            grid_feed_in: 1.92,
+            grid_consumption: 0,
+            battery_soc: 78.5,
+            battery_charging: 0.62,
+            battery_discharging: 0,
+            autonomy: 87
+        };
+
+        // Static chart data — plausible sunny afternoon scenario (12h view)
+        const powerFlowData = {
+            labels: ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
+                     '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'],
+            solar: [0, 0.3, 1.2, 2.8, 4.1, 5.2, 5.8, 5.5, 4.85, 4.2, 3.1, 1.8],
+            consumption: [0.8, 1.1, 1.4, 1.2, 1.8, 2.1, 2.5, 2.3, 2.31, 1.9, 2.4, 1.6],
+            batterySoc: [45, 45, 48, 55, 62, 68, 72, 75, 78.5, 80, 82, 83]
+        };
+
+        const gridEconomicsData = {
+            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            importCosts: [0.85, 0.42, 0.61, 0.38, 0.55, 0.22, 0.18],
+            exportIncome: [1.92, 2.15, 1.78, 2.45, 1.95, 2.68, 2.82]
+        };
+
+        const gridBalanceData = {
+            import: 3.2,
+            export: 14.6
+        };
+
+        // Read CSS custom properties for Chart.js theming
+        const styles = getComputedStyle(document.documentElement);
+        const textMuted = styles.getPropertyValue('--color-text-muted').trim();
+        const borderColor = styles.getPropertyValue('--color-border').trim();
+        const colorSolar = styles.getPropertyValue('--color-solar').trim();
+        const colorConsumption = styles.getPropertyValue('--color-consumption').trim();
+        const colorBattery = styles.getPropertyValue('--color-battery').trim();
+        const colorGrid = styles.getPropertyValue('--color-grid').trim();
+        const colorError = styles.getPropertyValue('--color-error').trim();
+
+        // Apply Chart.js global defaults from tokens
+        Chart.defaults.color = textMuted;
+        Chart.defaults.borderColor = borderColor;
+
+        // Helper: convert CSS color to rgba with alpha
+        function withAlpha(cssColor, alpha) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1; canvas.height = 1;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = cssColor;
+            ctx.fillRect(0, 0, 1, 1);
+            const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        // Power Flow Chart
+        const powerCtx = document.getElementById('powerChart').getContext('2d');
+        const powerChart = new Chart(powerCtx, {
+            type: 'line',
+            data: {
+                labels: powerFlowData.labels,
+                datasets: [
+                    {
+                        label: 'Solar Production',
+                        data: powerFlowData.solar,
+                        borderColor: colorSolar,
+                        backgroundColor: withAlpha(colorSolar, 0.1),
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointBackgroundColor: colorSolar,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Consumption',
+                        data: powerFlowData.consumption,
+                        borderColor: colorConsumption,
+                        backgroundColor: withAlpha(colorConsumption, 0.1),
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointBackgroundColor: colorConsumption,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Battery SOC',
+                        data: powerFlowData.batterySoc,
+                        borderColor: colorBattery,
+                        backgroundColor: withAlpha(colorBattery, 0.05),
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointBackgroundColor: colorBattery,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { usePointStyle: true }
+                    }
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Power (kW)' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 100,
+                        title: { display: true, text: 'Battery SOC (%)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+
+        // Grid Economics Chart
+        const economicsCtx = document.getElementById('economicsChart').getContext('2d');
+        const economicsChart = new Chart(economicsCtx, {
+            type: 'bar',
+            data: {
+                labels: gridEconomicsData.labels,
+                datasets: [
+                    {
+                        label: 'Import Cost (€)',
+                        data: gridEconomicsData.importCosts,
+                        backgroundColor: colorConsumption,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Export Income (€)',
+                        data: gridEconomicsData.exportIncome,
+                        backgroundColor: colorBattery,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 15
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Amount (€)' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                }
+            }
+        });
+
+        // Grid Balance Chart
+        const gridCtx = document.getElementById('gridChart').getContext('2d');
+        const gridChart = new Chart(gridCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Import', 'Export'],
+                datasets: [{
+                    label: 'Today (kWh)',
+                    data: [gridBalanceData.import, gridBalanceData.export],
+                    backgroundColor: [colorError, colorGrid],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Energy (kWh)' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                }
+            }
+        });
+
+        // Modal management (static — no API fetch)
+        const statusModal = document.getElementById('statusModal');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const modalClose = document.getElementById('modalClose');
+
+        statusIndicator.addEventListener('click', () => {
+            statusModal.classList.add('active');
+        });
+
+        modalClose.addEventListener('click', () => {
+            statusModal.classList.remove('active');
+        });
+
+        statusModal.addEventListener('click', (e) => {
+            if (e.target === statusModal) {
+                statusModal.classList.remove('active');
+            }
+        });
+
+        // Timeframe button interaction (visual only — no data fetch)
+        document.querySelectorAll('.timeframe-selector').forEach(selector => {
+            const buttons = selector.querySelectorAll('.timeframe-btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    buttons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

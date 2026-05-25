@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fronius Energy Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <style>
         * {
@@ -15,359 +12,85 @@
             box-sizing: border-box;
         }
 
-        html, body {
-            overflow-x: clip;
-        }
-
         :root {
-            /* Surface tokens */
-            --color-bg: hsl(30, 8%, 10%);
-            --color-bg-card: hsl(30, 6%, 14%);
-            --color-border: hsl(30, 5%, 21%);
-            --color-border-hover: hsl(30, 5%, 29%);
-
-            /* Text tokens */
-            --color-text: hsl(35, 10%, 82%);
-            --color-text-muted: hsl(30, 6%, 55%);
-
-            /* Metric category tokens */
-            --color-solar: hsl(35, 50%, 55%);
-            --color-consumption: hsl(5, 38%, 52%);
-            --color-grid: hsl(210, 30%, 52%);
-            --color-battery: hsl(160, 30%, 48%);
-            --color-autonomy: hsl(280, 25%, 52%);
-
-            /* Semantic state tokens */
-            --color-success: hsl(155, 30%, 52%);
-            --color-warning: hsl(30, 50%, 56%);
-            --color-error: hsl(355, 38%, 66%);
-
-            /* Interactive tokens */
-            --color-btn-bg: hsl(30, 6%, 14%);
-            --color-btn-active: hsl(30, 6%, 21%);
-            --color-btn-text: hsl(30, 6%, 52%);
-
-            /* Elevation */
-            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2);
-            --shadow-card-hover: 0 3px 6px rgba(0, 0, 0, 0.25);
-
-            /* Typography */
-            --font-body: 'IBM Plex Sans', system-ui, sans-serif;
-
-            /* Spacing (4px base) */
-            --space-xs: 4px;
-            --space-sm: 8px;
-            --space-md: 16px;
-            --space-lg: 24px;
-            --space-xl: 32px;
-            --space-2xl: 40px;
-            --space-3xl: 48px;
-
-            /* Transitions */
-            --duration-fast: 150ms;
-            --duration-normal: 200ms;
-            --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            --primary: #00d9ff;
+            --accent: #ff006e;
+            --warning: #ffa500;
+            --success: #00ff88;
+            --bg-dark: #0f0f1e;
+            --bg-darker: #0a0a14;
+            --bg-card: #1a1a2e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border: #2a2a3e;
         }
 
         body {
-            font-family: var(--font-body);
-            background: var(--color-bg);
-            color: var(--color-text);
-            line-height: 1.5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-darker) 0%, var(--bg-dark) 100%);
+            color: var(--text-primary);
+            overflow-x: hidden;
         }
 
         .container {
             max-width: 1600px;
             margin: 0 auto;
-            padding: var(--space-lg);
+            padding: 20px;
         }
 
-        /* Header */
         header {
-            background: var(--color-bg-card);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            padding: var(--space-lg);
-            margin-bottom: var(--space-xl);
+            background: var(--bg-card);
+            border-bottom: 2px solid var(--primary);
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 10px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: var(--shadow-card);
         }
 
         .header-left {
             display: flex;
             align-items: center;
-            gap: var(--space-lg);
-        }
-
-        h1 {
-            font-size: 20px;
-            font-weight: 600;
-            color: var(--color-text);
+            gap: 20px;
         }
 
         .status-indicator {
             display: flex;
             align-items: center;
-            gap: var(--space-sm);
-            padding: var(--space-sm) var(--space-md);
-            background: var(--color-bg-card);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
+            gap: 10px;
+            padding: 8px 15px;
+            background: rgba(0, 217, 255, 0.1);
+            border: 1px solid var(--primary);
+            border-radius: 5px;
             cursor: pointer;
-            transition: border-color var(--duration-normal) var(--ease-out);
+            transition: all 0.3s ease;
             font-size: 13px;
-            color: var(--color-text-muted);
         }
 
         .status-indicator:hover {
-            border-color: var(--color-border-hover);
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.2);
         }
 
         .status-dot {
             display: inline-block;
             width: 8px;
             height: 8px;
-            background: var(--color-success);
+            background: var(--success);
             border-radius: 50%;
+            animation: pulse 2s infinite;
         }
 
         .status-dot.warning {
-            background: var(--color-warning);
+            background: var(--warning);
         }
 
         .status-dot.error {
-            background: var(--color-error);
+            background: var(--accent);
         }
 
-        .timestamp {
-            font-size: 13px;
-            color: var(--color-text-muted);
-        }
-
-        /* Metrics Grid */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: var(--space-md);
-            margin-bottom: var(--space-xl);
-        }
-
-        .metric-card {
-            background: var(--color-bg-card);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            padding: var(--space-lg);
-            transition: transform var(--duration-normal) var(--ease-out),
-                        box-shadow var(--duration-normal) var(--ease-out);
-            box-shadow: var(--shadow-card);
-        }
-
-        .metric-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-card-hover);
-        }
-
-        .metric-label {
-            font-size: 11px;
-            color: var(--color-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: var(--space-sm);
-        }
-
-        .metric-value {
-            font-size: 30px;
-            font-weight: 700;
-            margin-bottom: var(--space-xs);
-        }
-
-        .metric-value.solar { color: var(--color-solar); }
-        .metric-value.consumption { color: var(--color-consumption); }
-        .metric-value.grid { color: var(--color-grid); }
-        .metric-value.battery { color: var(--color-battery); }
-        .metric-value.autonomy { color: var(--color-autonomy); }
-
-        .metric-unit {
-            font-size: 13px;
-            color: var(--color-text-muted);
-            font-weight: 400;
-        }
-
-        .metric-trend {
-            display: inline-block;
-            margin-top: var(--space-sm);
-            padding: var(--space-xs) var(--space-sm);
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 500;
-            letter-spacing: 0.02em;
-        }
-
-        .metric-trend.trend--active {
-            background: hsla(35, 50%, 55%, 0.12);
-            color: var(--color-solar);
-        }
-
-        .metric-trend.trend--idle {
-            background: hsla(30, 6%, 52%, 0.12);
-            color: var(--color-text-muted);
-        }
-
-        .metric-trend.trend--export {
-            background: hsla(210, 30%, 52%, 0.12);
-            color: var(--color-grid);
-        }
-
-        .metric-trend.trend--import {
-            background: hsla(5, 38%, 52%, 0.12);
-            color: var(--color-consumption);
-        }
-
-        .metric-trend.trend--charge {
-            background: hsla(160, 30%, 48%, 0.12);
-            color: var(--color-battery);
-        }
-
-        .metric-trend.trend--discharge {
-            background: hsla(5, 38%, 52%, 0.12);
-            color: var(--color-consumption);
-        }
-
-        .metric-trend.trend--success {
-            background: hsla(155, 30%, 52%, 0.12);
-            color: var(--color-success);
-        }
-
-        .metric-trend.trend--warn {
-            background: hsla(30, 50%, 56%, 0.12);
-            color: var(--color-warning);
-        }
-
-        /* Charts Grid */
-        .charts-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: var(--space-md);
-            margin-bottom: var(--space-xl);
-        }
-
-        .chart-card {
-            background: var(--color-bg-card);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            padding: var(--space-lg);
-            box-shadow: var(--shadow-card);
-        }
-
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--space-md);
-        }
-
-        .chart-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--color-text);
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-        }
-
-        .timeframe-selector {
-            display: flex;
-            gap: var(--space-xs);
-        }
-
-        .timeframe-btn {
-            padding: var(--space-xs) var(--space-sm);
-            border: 1px solid var(--color-border);
-            background: var(--color-btn-bg);
-            color: var(--color-btn-text);
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 500;
-            font-family: var(--font-body);
-            transition: background var(--duration-fast) var(--ease-out),
-                        border-color var(--duration-fast) var(--ease-out);
-        }
-
-        .timeframe-btn:hover {
-            border-color: var(--color-border-hover);
-            color: var(--color-text);
-        }
-
-        .timeframe-btn.active {
-            background: var(--color-btn-active);
-            border-color: var(--color-border-hover);
-            color: var(--color-text);
-        }
-
-        .chart-container {
-            position: relative;
-            height: 300px;
-        }
-
-        /* Status Grid */
-        .status-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: var(--space-md);
-            margin-bottom: var(--space-xl);
-        }
-
-        .status-card {
-            background: var(--color-bg-card);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            padding: var(--space-lg);
-            box-shadow: var(--shadow-card);
-        }
-
-        .status-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--color-text);
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            margin-bottom: var(--space-md);
-        }
-
-        .status-item {
-            display: flex;
-            justify-content: space-between;
-            padding: var(--space-sm) 0;
-            border-bottom: 1px solid var(--color-border);
-            font-size: 13px;
-        }
-
-        .status-item:last-child {
-            border-bottom: none;
-        }
-
-        .status-label {
-            color: var(--color-text-muted);
-        }
-
-        .status-value {
-            color: var(--color-text);
-            font-weight: 500;
-        }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            padding: var(--space-lg);
-            color: var(--color-text-muted);
-            font-size: 12px;
-            border-top: 1px solid var(--color-border);
-            margin-top: var(--space-xl);
-        }
-
-        /* Modal */
+        /* Modal Styles */
         .modal {
             display: none;
             position: fixed;
@@ -386,47 +109,46 @@
         }
 
         .modal-content {
-            background: var(--color-bg-card);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            padding: var(--space-xl);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 30px;
             max-width: 500px;
             width: 90%;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: var(--space-lg);
+            margin-bottom: 20px;
         }
 
         .modal-title {
-            font-size: 18px;
+            font-size: 20px;
+            color: var(--primary);
             font-weight: 600;
-            color: var(--color-text);
         }
 
         .modal-close {
             background: none;
             border: none;
-            color: var(--color-text-muted);
+            color: var(--text-secondary);
             font-size: 24px;
             cursor: pointer;
-            transition: color var(--duration-fast) var(--ease-out);
-            font-family: var(--font-body);
+            transition: color 0.3s ease;
         }
 
         .modal-close:hover {
-            color: var(--color-text);
+            color: var(--primary);
         }
 
         .status-item-row {
             display: flex;
             justify-content: space-between;
-            padding: var(--space-sm) 0;
-            border-bottom: 1px solid var(--color-border);
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
             font-size: 13px;
         }
 
@@ -435,45 +157,309 @@
         }
 
         .status-item-label {
-            color: var(--color-text-muted);
+            color: var(--text-secondary);
             display: flex;
             align-items: center;
-            gap: var(--space-sm);
+            gap: 8px;
         }
 
         .status-item-value {
-            color: var(--color-text);
-            font-weight: 500;
+            color: var(--primary);
+            font-weight: 600;
             text-align: right;
         }
-
-        .status-item-value a { color: var(--color-text); text-decoration: none; }
+        .status-item-value a { color: var(--primary); text-decoration: none; }
         .status-item-value a:hover { text-decoration: underline; }
 
         .status-badge {
             display: inline-block;
-            padding: var(--space-xs) var(--space-sm);
-            border-radius: 12px;
+            padding: 2px 8px;
+            border-radius: 3px;
             font-size: 11px;
-            font-weight: 500;
+            font-weight: 600;
         }
 
         .status-badge.ok {
-            background: hsla(155, 30%, 52%, 0.12);
-            color: var(--color-success);
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success);
         }
 
         .status-badge.warning {
-            background: hsla(30, 50%, 56%, 0.12);
-            color: var(--color-warning);
+            background: rgba(255, 165, 0, 0.2);
+            color: var(--warning);
         }
 
         .status-badge.error {
-            background: hsla(355, 38%, 66%, 0.12);
-            color: var(--color-error);
+            background: rgba(255, 0, 110, 0.2);
+            color: var(--accent);
         }
 
-        /* Responsive */
+        /* Small pill badge used on metric cards */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            margin-left: 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            vertical-align: middle;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            background: rgba(160,160,160,0.1);
+        }
+        .badge.export { border-color: var(--primary); color: #00d9ff; background: rgba(0,217,255,0.15); }
+        .badge.import { border-color: #ff006e; color: #ff006e; background: rgba(255,0,110,0.15); }
+        .badge.idle   { border-color: var(--border); color: var(--text-secondary); background: rgba(160,160,160,0.12); }
+
+        h1 {
+            font-size: 28px;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(0, 217, 255, 0.3);
+        }
+
+        .timestamp {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--primary);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 18px rgba(0, 217, 255, 0.15);
+        }
+
+        .metric-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.2);
+            transform: translateY(-5px);
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transform: scaleX(1);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px rgba(0, 217, 255, 0.2);
+        }
+
+        .metric-unit {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* Unified pill status style for all cards */
+        .metric-trend {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            background: rgba(160,160,160,0.10);
+            user-select: none;
+        }
+        .metric-trend.trend--export { border-color: var(--primary); color: #00d9ff; background: rgba(0,217,255,0.15); }
+        .metric-trend.trend--import { border-color: #ff006e; color: #ff006e; background: rgba(255,0,110,0.15); }
+        .metric-trend.trend--active { border-color: var(--primary); color: #00d9ff; background: rgba(0,217,255,0.15); }
+        .metric-trend.trend--idle   { border-color: var(--border); color: var(--text-secondary); background: rgba(160,160,160,0.12); }
+        .metric-trend.trend--success{ border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.12); }
+        .metric-trend.trend--warn   { border-color: var(--warning); color: var(--warning); background: rgba(255,165,0,0.12); }
+        .metric-trend.trend--charge { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.12); }
+        .metric-trend.trend--discharge{ border-color: #ff006e; color: #ff006e; background: rgba(255,0,110,0.15); }
+
+        /* Specific metric colors */
+        .solar .metric-value { color: #ffa500; }
+        .solar .metric-trend { background: rgba(255, 165, 0, 0.1); color: #ffa500; }
+
+        .consumption .metric-value { color: #ff006e; }
+        .consumption .metric-trend { background: rgba(255, 0, 110, 0.1); color: #ff006e; }
+
+        .grid .metric-value { color: #00d9ff; }
+        .grid .metric-trend { background: rgba(0, 217, 255, 0.1); color: #00d9ff; }
+
+        .battery .metric-value { color: #00ff88; }
+        .battery .metric-trend { background: rgba(0, 255, 136, 0.1); color: #00ff88; }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .chart-title {
+            font-size: 16px;
+            color: var(--primary);
+            margin-bottom: 15px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .timeframe-selector {
+            display: flex;
+            gap: 8px;
+        }
+
+        .timeframe-btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            background: rgba(0, 217, 255, 0.05);
+            color: var(--text-secondary);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+
+        .timeframe-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(0, 217, 255, 0.1);
+        }
+
+        .timeframe-btn.active {
+            border-color: var(--primary);
+            background: rgba(0, 217, 255, 0.2);
+            color: var(--primary);
+            box-shadow: 0 0 10px rgba(0, 217, 255, 0.3);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .status-title {
+            font-size: 14px;
+            color: var(--primary);
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            color: var(--text-secondary);
+        }
+
+        .status-value {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            background: var(--border);
+            height: 8px;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success), var(--primary));
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .alert-banner {
+            background: rgba(255, 165, 0, 0.1);
+            border-left: 4px solid var(--warning);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: var(--warning);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            border-top: 1px solid var(--border);
+            margin-top: 30px;
+        }
+
         @media (max-width: 768px) {
             .metrics-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -483,28 +469,35 @@
                 grid-template-columns: 1fr;
             }
 
-            header {
-                flex-direction: column;
-                gap: var(--space-sm);
-                text-align: center;
-            }
-
-            .header-left {
-                flex-direction: column;
-                gap: var(--space-sm);
-            }
-
             h1 {
-                font-size: 16px;
+                font-size: 20px;
             }
 
             .metric-value {
                 font-size: 24px;
             }
 
-            .metric-card {
-                padding: var(--space-md);
+            header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
             }
+        }
+
+        /* Animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            margin-right: 8px;
         }
     </style>
 </head>
@@ -512,7 +505,7 @@
     <div class="container">
         <header>
             <div class="header-left">
-                <h1>Fronius Energy Dashboard</h1>
+                <h1><span class="live-indicator"></span>Fronius Energy Dashboard</h1>
                 <div class="status-indicator" id="statusIndicator" title="Click for system status">
                     <span class="status-dot"></span>
                     <span>System Status</span>
@@ -529,53 +522,54 @@
                     <button class="modal-close" id="modalClose">&times;</button>
                 </div>
                 <div id="statusDetails">
-                    <p style="color: var(--color-text-muted); text-align: center;">Loading...</p>
+                    <p style="color: var(--text-secondary); text-align: center;">Loading...</p>
                 </div>
             </div>
         </div>
 
         <!-- Real-time Metrics -->
         <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-label">Solar Production</div>
-                <div class="metric-value solar">0.00</div>
+            <div class="metric-card solar">
+                <div class="metric-label">☀️ Solar Production</div>
+                <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
                 <div class="metric-trend">Loading...</div>
             </div>
 
-            <div class="metric-card">
-                <div class="metric-label">Consumption</div>
-                <div class="metric-value consumption">0.00</div>
+            <div class="metric-card consumption">
+                <div class="metric-label">⚡ Total Consumption</div>
+                <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
                 <div class="metric-trend">Loading...</div>
             </div>
 
-            <div class="metric-card">
-                <div class="metric-label">Grid Load</div>
-                <div class="metric-value grid">0.00</div>
+            <div class="metric-card grid">
+                <div class="metric-label">🔌 Grid Load</div>
+                <div class="metric-value">0.00</div>
                 <div class="metric-unit">kW</div>
                 <div class="metric-trend">Loading...</div>
             </div>
 
-            <div class="metric-card">
-                <div class="metric-label">Battery SOC</div>
-                <div class="metric-value battery">0.0</div>
+            <div class="metric-card battery">
+                <div class="metric-label">🔋 Battery SOC</div>
+                <div class="metric-value">0.0</div>
                 <div class="metric-unit">%</div>
                 <div class="metric-trend">Loading...</div>
             </div>
 
             <div class="metric-card">
-                <div class="metric-label">Autonomy</div>
-                <div class="metric-value autonomy">0</div>
+                <div class="metric-label">🎯 Autonomy</div>
+                <div class="metric-value">0</div>
                 <div class="metric-unit">%</div>
                 <div class="metric-trend">Loading...</div>
             </div>
+
         </div>
 
         <!-- Charts -->
         <div class="charts-grid">
             <div class="chart-card">
-                <div class="chart-header">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div class="chart-title">Power Flow</div>
                     <div class="timeframe-selector">
                         <button class="timeframe-btn" data-range="3h">3H</button>
@@ -590,7 +584,7 @@
             </div>
 
             <div class="chart-card">
-                <div class="chart-header">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div class="chart-title">Grid Economics</div>
                     <div class="timeframe-selector">
                         <button class="timeframe-btn active" data-range="7d">7D</button>
@@ -604,9 +598,7 @@
             </div>
 
             <div class="chart-card">
-                <div class="chart-header">
-                    <div class="chart-title">Grid Balance</div>
-                </div>
+                <div class="chart-title">Grid Balance</div>
                 <div class="chart-container">
                     <canvas id="gridChart"></canvas>
                 </div>
@@ -645,13 +637,22 @@
                     <span class="status-label">Inverter Temp</span>
                     <span class="status-value">--°C</span>
                 </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
                 <div class="status-item">
                     <span class="status-label">Battery Temp</span>
                     <span class="status-value">--°C</span>
                 </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
                 <div class="status-item">
                     <span class="status-label">System Load</span>
                     <span class="status-value">--%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Last Update</span>
@@ -685,7 +686,7 @@
         </div>
 
         <div class="footer">
-            <p>Fronius GEN24 Energy Management System · Dashboard v2.0 · Connected to InfluxDB</p>
+            <p>Fronius GEN24 Energy Management System | Dashboard v1.0 | Connected to InfluxDB</p>
         </div>
     </div>
 
@@ -694,28 +695,6 @@
         let powerChart, economicsChart, gridChart;
         let startTime = Date.now();
         let lastHealthCheck = {};
-
-        // Read CSS custom properties for Chart.js theming
-        const styles = getComputedStyle(document.documentElement);
-        const textMuted = styles.getPropertyValue('--color-text-muted').trim();
-        const borderColor = styles.getPropertyValue('--color-border').trim();
-        const colorSolar = styles.getPropertyValue('--color-solar').trim();
-        const colorConsumption = styles.getPropertyValue('--color-consumption').trim();
-        const colorBattery = styles.getPropertyValue('--color-battery').trim();
-        const colorGrid = styles.getPropertyValue('--color-grid').trim();
-        const colorError = styles.getPropertyValue('--color-error').trim();
-        const colorSuccess = styles.getPropertyValue('--color-success').trim();
-
-        // Helper: convert CSS color to rgba with alpha
-        function withAlpha(cssColor, alpha) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 1; canvas.height = 1;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = cssColor;
-            ctx.fillRect(0, 0, 1, 1);
-            const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        }
 
         // Modal management
         const statusModal = document.getElementById('statusModal');
@@ -754,43 +733,43 @@
                 
                 let html = `
                     <div class="status-item-row">
-                        <span class="status-item-label">Database Connection</span>
+                        <span class="status-item-label">📡 Database Connection</span>
                         <span class="status-item-value">
                             <span class="status-badge ${dbStatus}">${data.influxdb || 'unknown'}</span>
                         </span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">Build Time</span>
+                        <span class="status-item-label">🏗️ Build Time</span>
                         <span class="status-item-value">${data.build_time || '--'}</span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">Git Commit</span>
-                        <span class="status-item-value">${(() => { const short = data.git_commit || '--'; if (data.git_commit_full && data.git_repo) { const url = 'https://github.com/' + data.git_repo + '/commit/' + data.git_commit_full; return '<a href="' + url + '" target="_blank" rel="noopener">' + short + '</a>' + (data.git_branch ? ' @ ' + data.git_branch : '');} return short + (data.git_branch ? ' @ ' + data.git_branch : ''); })()}</span>
+                        <span class="status-item-label">🔖 Git Commit</span>
+                        <span class="status-item-value">${(() => { const short = data.git_commit || '--'; if (data.git_commit_full && data.git_repo) { const url = `https://github.com/${data.git_repo}/commit/${data.git_commit_full}`; return `<a href="${url}" target="_blank" rel="noopener">${short}</a>${data.git_branch ? ' @ ' + data.git_branch : ''}`;} return `${short}${data.git_branch ? ' @ ' + data.git_branch : ''}`; })()}</span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">Database Latency</span>
+                        <span class="status-item-label">⏱️ Database Latency</span>
                         <span class="status-item-value">${data.db_latency || '--'}ms</span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">API Status</span>
+                        <span class="status-item-label">🖥️ API Status</span>
                         <span class="status-item-value">
                             <span class="status-badge ${apiStatus}">operational</span>
                         </span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">API Latency</span>
+                        <span class="status-item-label">⏱️ API Latency</span>
                         <span class="status-item-value">${data.api_latency || '--'}ms</span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">System Uptime</span>
+                        <span class="status-item-label">⏰ System Uptime</span>
                         <span class="status-item-value">${uptimeStr}</span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">Memory Usage</span>
+                        <span class="status-item-label">💾 Memory Usage</span>
                         <span class="status-item-value">${data.memory_usage || '--'}MB</span>
                     </div>
                     <div class="status-item-row">
-                        <span class="status-item-label">Last Updated</span>
+                        <span class="status-item-label">📊 Last Updated</span>
                         <span class="status-item-value">${new Date().toLocaleTimeString('en-US', { timeZone: serverTimezone })}</span>
                     </div>
                 `;
@@ -800,7 +779,7 @@
             } catch (error) {
                 console.error('Failed to fetch status:', error);
                 document.getElementById('statusDetails').innerHTML = 
-                    '<p style="color: var(--color-error);">Failed to load status information</p>';
+                    '<p style="color: var(--accent);">Failed to load status information</p>';
                 updateStatusDot('error');
             }
         }
@@ -888,46 +867,45 @@
                     autonomy: data.autonomy || 0
                 };
 
-                const cards = document.querySelectorAll('.metric-card');
-
                 // Update Solar Production
-                cards[0].querySelector('.metric-value').textContent = metrics.solar.toFixed(2);
-                const solarTrend = cards[0].querySelector('.metric-trend');
+                document.querySelector('.solar .metric-value').textContent = metrics.solar.toFixed(2);
+                const solarTrend = document.querySelector('.solar .metric-trend');
                 solarTrend.classList.remove('trend--active','trend--idle');
                 if (metrics.solar > 0) { solarTrend.textContent = 'Active'; solarTrend.classList.add('trend--active'); }
                 else { solarTrend.textContent = 'Idle'; solarTrend.classList.add('trend--idle'); }
 
                 // Update Consumption
-                cards[1].querySelector('.metric-value').textContent = metrics.consumption.toFixed(2);
-                const consumptionTrend = cards[1].querySelector('.metric-trend');
+                document.querySelector('.consumption .metric-value').textContent = metrics.consumption.toFixed(2);
+                const consumptionTrend = document.querySelector('.consumption .metric-trend');
                 consumptionTrend.classList.remove('trend--active','trend--idle');
                 if (metrics.consumption > 0) { consumptionTrend.textContent = 'Active'; consumptionTrend.classList.add('trend--active'); }
                 else { consumptionTrend.textContent = 'Idle'; consumptionTrend.classList.add('trend--idle'); }
 
-                // Update Grid Load (Feed-in vs Import)
+                // Update Grid Load (Feed-in vs Import) using pill status only
                 const exportKW = Number(data.grid_feed_in || 0);
                 const importKW = Number(data.grid_consumption || 0);
                 let gridKW = 0; let dir = 'idle';
                 if (exportKW > 0) { gridKW = exportKW; dir = 'export'; }
                 else if (importKW > 0) { gridKW = importKW; dir = 'import'; }
 
+                // Determine status by displayed precision: if 0.00 → Idle
                 const displayed = Number(gridKW.toFixed(2));
                 if (displayed === 0) { dir = 'idle'; }
 
-                cards[2].querySelector('.metric-value').textContent = displayed.toFixed(2);
-                const gridTrend = cards[2].querySelector('.metric-trend');
+                document.querySelector('.grid .metric-value').textContent = displayed.toFixed(2);
+                const gridTrend = document.querySelector('.grid .metric-trend');
                 gridTrend.classList.remove('trend--export','trend--import','trend--idle');
                 if (dir === 'export') { gridTrend.textContent = 'Feed-in'; gridTrend.classList.add('trend--export'); }
                 else if (dir === 'import') { gridTrend.textContent = 'Import'; gridTrend.classList.add('trend--import'); }
                 else { gridTrend.textContent = 'Idle'; gridTrend.classList.add('trend--idle'); }
 
-                // Update Battery status
-                cards[3].querySelector('.metric-value').textContent = metrics.battery.toFixed(1);
-                const batteryTrend = cards[3].querySelector('.metric-trend');
+                // Update Battery status using actual power flow
+                document.querySelector('.battery .metric-value').textContent = metrics.battery.toFixed(1);
+                const batteryTrend = document.querySelector('.battery .metric-trend');
                 const chg = Number(data.battery_charging || 0);
                 const dchg = Number(data.battery_discharging || 0);
                 const soc = Number(metrics.battery || 0);
-                const EPS = 0.01;
+                const EPS = 0.01; // 10 W threshold
                 batteryTrend.classList.remove('trend--success','trend--charge','trend--discharge','trend--warn','trend--idle');
                 if (chg > EPS) { batteryTrend.textContent = 'Charging'; batteryTrend.classList.add('trend--charge'); }
                 else if (dchg > EPS) { batteryTrend.textContent = 'Discharging'; batteryTrend.classList.add('trend--discharge'); }
@@ -935,13 +913,17 @@
                 else { batteryTrend.textContent = 'Idle'; batteryTrend.classList.add('trend--idle'); }
 
                 // Update Autonomy
-                cards[4].querySelector('.metric-value').textContent = metrics.autonomy.toFixed(0);
-                const autonomyTrend = cards[4].querySelector('.metric-trend');
-                autonomyTrend.classList.remove('trend--success','trend--warn','trend--idle');
-                if (metrics.autonomy > 80) { autonomyTrend.textContent = 'Excellent'; autonomyTrend.classList.add('trend--success'); }
-                else if (metrics.autonomy > 60) { autonomyTrend.textContent = 'Good'; autonomyTrend.classList.add('trend--success'); }
-                else if (metrics.autonomy > 40) { autonomyTrend.textContent = 'Fair'; autonomyTrend.classList.add('trend--idle'); }
-                else { autonomyTrend.textContent = 'Limited'; autonomyTrend.classList.add('trend--warn'); }
+                const allCards = document.querySelectorAll('.metric-card');
+                if (allCards.length >= 5) {
+                    const autonomyCard = allCards[4];
+                    autonomyCard.querySelector('.metric-value').textContent = metrics.autonomy.toFixed(0);
+                    const autonomyTrend = autonomyCard.querySelector('.metric-trend');
+                    autonomyTrend.classList.remove('trend--success','trend--good','trend--fair','trend--warn');
+                    if (metrics.autonomy > 80) { autonomyTrend.textContent = 'Excellent'; autonomyTrend.classList.add('trend--success'); }
+                    else if (metrics.autonomy > 60) { autonomyTrend.textContent = 'Good'; autonomyTrend.classList.add('trend--success'); }
+                    else if (metrics.autonomy > 40) { autonomyTrend.textContent = 'Fair'; autonomyTrend.classList.add('trend--fair'); }
+                    else { autonomyTrend.textContent = 'Limited'; autonomyTrend.classList.add('trend--warn'); }
+                }
             } catch (error) {
                 console.error('Failed to fetch current metrics:', error);
             }
@@ -962,6 +944,7 @@
                     return;
                 }
 
+                // Update power flow chart
                 if (powerChart) {
                     powerChart.data.labels = data.labels || [];
                     powerChart.data.datasets[0].data = data.solar || [];
@@ -972,12 +955,9 @@
 
                 // Update active button state
                 document.querySelectorAll('.timeframe-btn').forEach(btn => {
-                    const cardTitle = btn.closest('.chart-card')?.querySelector('.chart-title')?.textContent || '';
-                    if (cardTitle.includes('Power')) {
-                        btn.classList.remove('active');
-                        if (btn.dataset.range === range) {
-                            btn.classList.add('active');
-                        }
+                    btn.classList.remove('active');
+                    if (btn.dataset.range === range) {
+                        btn.classList.add('active');
                     }
                 });
             } catch (error) {
@@ -987,9 +967,11 @@
 
         // Legacy function for backward compatibility
         async function update24hChart() {
+            // Use the current user selection instead of always defaulting to 12h
             await updatePowerChart(currentPowerRange);
         }
 
+        // Fetch 7-day data and update chart
         // Track current economics time range
         let currentEconomicsRange = "7d";
 
@@ -1008,10 +990,12 @@
                     return;
                 }
 
+                // Update currency symbol from API response
                 if (data.currency_symbol) {
                     currencySymbol = data.currency_symbol;
                 }
 
+                // Update economics chart
                 if (economicsChart) {
                     console.log(`[updateEconomicsChart] Updating chart with ${data.labels?.length || 0} labels`);
                     economicsChart.data.labels = data.labels || [];
@@ -1097,13 +1081,13 @@
             }
         }
 
-        // Initialize charts with dynamic theming from CSS custom properties
+        // Initialize charts with data
         async function initCharts() {
-            // Apply Chart.js global defaults from CSS tokens
-            Chart.defaults.color = textMuted;
-            Chart.defaults.borderColor = borderColor;
+            // Chart default options
+            Chart.defaults.color = '#a0a0a0';
+            Chart.defaults.borderColor = '#2a2a3e';
 
-            // Power Flow Chart
+            // Power Flow Chart (24-hour line chart)
             const powerCtx = document.getElementById('powerChart').getContext('2d');
             powerChart = new Chart(powerCtx, {
                 type: 'line',
@@ -1113,37 +1097,37 @@
                         {
                             label: 'Solar Production',
                             data: [],
-                            borderColor: colorSolar,
-                            backgroundColor: withAlpha(colorSolar, 0.1),
-                            tension: 0.4,
+                            borderColor: '#ffa500',
+                            backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                            tension: 0.6,
                             fill: true,
                             borderWidth: 2,
                             pointRadius: 3,
-                            pointBackgroundColor: colorSolar,
+                            pointBackgroundColor: '#ffa500',
                             yAxisID: 'y'
                         },
                         {
                             label: 'Consumption',
                             data: [],
-                            borderColor: colorConsumption,
-                            backgroundColor: withAlpha(colorConsumption, 0.1),
-                            tension: 0.4,
+                            borderColor: '#ff006e',
+                            backgroundColor: 'rgba(255, 0, 110, 0.1)',
+                            tension: 0.6,
                             fill: true,
                             borderWidth: 2,
                             pointRadius: 3,
-                            pointBackgroundColor: colorConsumption,
+                            pointBackgroundColor: '#ff006e',
                             yAxisID: 'y'
                         },
                         {
                             label: 'Battery SOC',
                             data: [],
-                            borderColor: colorBattery,
-                            backgroundColor: withAlpha(colorBattery, 0.05),
-                            tension: 0.4,
+                            borderColor: '#00ff88',
+                            backgroundColor: 'rgba(0, 255, 136, 0.05)',
+                            tension: 0.6,
                             fill: true,
                             borderWidth: 2,
                             pointRadius: 3,
-                            pointBackgroundColor: colorBattery,
+                            pointBackgroundColor: '#00ff88',
                             yAxisID: 'y1'
                         }
                     ]
@@ -1182,7 +1166,7 @@
                 }
             });
 
-            // Grid Economics Chart
+            // Grid Economics Chart (interactive bar chart showing import costs and export income)
             const economicsCtx = document.getElementById('economicsChart').getContext('2d');
             economicsChart = new Chart(economicsCtx, {
                 type: 'bar',
@@ -1192,14 +1176,14 @@
                         {
                             label: `Import Cost (${currencySymbol})`,
                             data: [],
-                            backgroundColor: colorConsumption,
-                            borderRadius: 4
+                            backgroundColor: '#ff006e',
+                            borderRadius: 5
                         },
                         {
                             label: `Export Income (${currencySymbol})`,
                             data: [],
-                            backgroundColor: colorSuccess,
-                            borderRadius: 4
+                            backgroundColor: '#00ff88',
+                            borderRadius: 5
                         }
                     ]
                 },
@@ -1252,8 +1236,8 @@
                     datasets: [{
                         label: 'Today (kWh)',
                         data: [0, 0],
-                        backgroundColor: [colorConsumption, colorGrid],
-                        borderRadius: 4
+                        backgroundColor: ['#ff006e', '#00d9ff'],
+                        borderRadius: 5
                     }]
                 },
                 options: {
@@ -1262,14 +1246,7 @@
                     indexAxis: 'x',
                     scales: {
                         y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Energy (kWh)' }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
+                            beginAtZero: true
                         }
                     }
                 }
@@ -1278,8 +1255,8 @@
             // Load initial data
             updateTimestamp();
             await updateCurrentMetrics();
-            await updatePowerChart("12h");
-            await updateEconomicsChart("7d");
+            await updatePowerChart("12h");  // Start with 12h view (default)
+            await updateEconomicsChart("7d");  // Start with 7d view (default)
             await updateTodayStats();
         }
 
@@ -1296,7 +1273,7 @@
             // Initialize charts and set up data refresh
             await initCharts();
             
-            // Add event listeners to timeframe buttons
+            // Add event listeners to timeframe buttons with better detection
             document.querySelectorAll('.timeframe-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     e.preventDefault();
@@ -1317,10 +1294,10 @@
                 });
             });
             
-            // Auto-refresh intervals
+            // Only set intervals after charts are fully initialized
             setInterval(updateCurrentMetrics, 30000);      // Update metrics every 30 seconds
-            setInterval(update24hChart, 60000);            // Update power chart every 60 seconds
-            setInterval(update7dChart, 300000);            // Update economics chart every 5 minutes
+            setInterval(update24hChart, 60000);            // Update power chart every 60 seconds (respects user selection)
+            setInterval(update7dChart, 300000);            // Update economics chart every 5 minutes (respects user selection)
             setInterval(updateTodayStats, 120000);         // Update today stats every 2 minutes
         })();
     </script>
