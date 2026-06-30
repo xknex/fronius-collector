@@ -34,7 +34,7 @@ services:
       FRONIUS_INVERTER_USE_HTTPS: ${FRONIUS_INVERTER_USE_HTTPS:-false}
       FRONIUS_INVERTER_VERIFY_SSL: ${FRONIUS_INVERTER_VERIFY_SSL:-false}
       FRONIUS_INVERTER_DEVICE_ID: ${FRONIUS_INVERTER_DEVICE_ID:-1}
-      WEATHER_LOCATION: ${WEATHER_LOCATION:-Kranichfeld}
+      WEATHER_LOCATION: ${WEATHER_LOCATION:-Berlin}
     command: python /app/dashboard/app.py
     depends_on:
       - influxdb2

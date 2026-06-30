@@ -231,7 +231,7 @@ async def logo():
 async def get_weather():
     """Get current weather from wttr.in for the configured location."""
     import subprocess
-    location = os.getenv("WEATHER_LOCATION", "Kranichfeld")
+    location = os.getenv("WEATHER_LOCATION", "Berlin")
     try:
         result = subprocess.run(
             ["curl", "-s", f"wttr.in/{location}?format=3"],
