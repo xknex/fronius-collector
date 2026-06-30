@@ -705,36 +705,68 @@ async def get_7d_data():
 
 @app.get("/api/data/today")
 async def get_today_stats():
-    """Get today's energy statistics."""
+    """Get today's energy statistics (deltas for today only, not lifetime totals)."""
     if query_api is None:
         return {"error": "InfluxDB not connected"}
     
     try:
-        # Query totals from today - use multiple filters instead of array
-        query = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: -24h)
+        # Calculate today's start: local midnight converted to UTC
+        now_local = to_local_time(datetime.now(timezone.utc))
+        if LOCAL_TZ:
+            local_midnight = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            local_midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        today_start_utc = local_midnight.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        fields_filter = ('r["_field"] == "Solar_Produced_Total" or '
+                         'r["_field"] == "Consumption_Total" or '
+                         'r["_field"] == "Grid_FeedIn_Total" or '
+                         'r["_field"] == "Grid_Consumption_Total"')
+
+        # Query first values of today
+        query_first = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: {today_start_utc})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Total" or r["_field"] == "Consumption_Total" or r["_field"] == "Grid_FeedIn_Total" or r["_field"] == "Grid_Consumption_Total")
-  |> last()
-'''
-        
-        result = query_api.query(query)
-        
-        data = {}
-        for table in result:
+  |> filter(fn: (r) => {fields_filter})
+  |> first()'''
+
+        # Query last (latest) values of today
+        query_last = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: {today_start_utc})
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => {fields_filter})
+  |> last()'''
+
+        result_first = query_api.query(query_first)
+        result_last = query_api.query(query_last)
+
+        first_values = {}
+        for table in result_first:
             for record in table.records:
                 field = record.values.get("_field")
                 value = record.get_value()
-                if field == "Solar_Produced_Total":
-                    data["solar_production"] = value
-                elif field == "Consumption_Total":
-                    data["consumption"] = value
-                elif field == "Grid_FeedIn_Total":
-                    data["grid_export"] = value
-                elif field == "Grid_Consumption_Total":
-                    data["grid_import"] = value
-        
-        return data
+                if field and value is not None:
+                    first_values[field] = float(value)
+
+        last_values = {}
+        for table in result_last:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field and value is not None:
+                    last_values[field] = float(value)
+
+        # Compute deltas (today's actual usage)
+        def delta(field_name):
+            return max(0.0, last_values.get(field_name, 0.0) - first_values.get(field_name, 0.0))
+
+        return {
+            "solar_production": round(delta("Solar_Produced_Total"), 2),
+            "consumption": round(delta("Consumption_Total"), 2),
+            "grid_export": round(delta("Grid_FeedIn_Total"), 2),
+            "grid_import": round(delta("Grid_Consumption_Total"), 2),
+        }
     except Exception as e:
         logger.error(f"Error querying today stats: {e}")
         return {"error": str(e)}
