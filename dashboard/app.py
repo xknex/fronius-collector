@@ -584,11 +584,10 @@ async def get_24h_data():
     return await get_power_data(range="24h")
 
 def get_today_partial() -> dict:
-    """Compute today's partial kWh values from raw data using a two-point query.
+    """Compute today's partial kWh values from raw data using spread().
 
-    Queries fronius_clean for the first and last value of Grid_Consumption_Total
-    and Grid_FeedIn_Total since local midnight (converted to UTC). Returns the
-    delta (last - first) as grid_import_kwh and grid_export_kwh.
+    Queries fronius_clean for the spread (max - min) of Grid_Consumption_Total
+    and Grid_FeedIn_Total since local midnight. This gives today's actual delta.
 
     Returns:
         dict with keys grid_import_kwh (float) and grid_export_kwh (float).
@@ -609,51 +608,25 @@ def get_today_partial() -> dict:
 
         today_start_utc = local_midnight.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Query first values of today
-        query_first = f'''from(bucket: "{INFLUX_BUCKET}")
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: {today_start_utc})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
   |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total" or r["_field"] == "Grid_FeedIn_Total")
-  |> first()'''
+  |> spread()'''
 
-        # Query last (latest) values of today
-        query_last = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: {today_start_utc})
-  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => r["_field"] == "Grid_Consumption_Total" or r["_field"] == "Grid_FeedIn_Total")
-  |> last()'''
+        result = query_api.query(query)
 
-        result_first = query_api.query(query_first)
-        result_last = query_api.query(query_last)
-
-        # Parse first values
-        first_values = {}
-        for table in result_first:
+        values = {}
+        for table in result:
             for record in table.records:
                 field = record.values.get("_field")
                 value = record.get_value()
                 if field and value is not None:
-                    first_values[field] = float(value)
-
-        # Parse last values
-        last_values = {}
-        for table in result_last:
-            for record in table.records:
-                field = record.values.get("_field")
-                value = record.get_value()
-                if field and value is not None:
-                    last_values[field] = float(value)
-
-        # Need both first and last for both fields to compute deltas
-        if not first_values or not last_values:
-            return default
-
-        grid_import_kwh = last_values.get("Grid_Consumption_Total", 0.0) - first_values.get("Grid_Consumption_Total", 0.0)
-        grid_export_kwh = last_values.get("Grid_FeedIn_Total", 0.0) - first_values.get("Grid_FeedIn_Total", 0.0)
+                    values[field] = max(0.0, float(value))
 
         return {
-            "grid_import_kwh": max(grid_import_kwh, 0.0),
-            "grid_export_kwh": max(grid_export_kwh, 0.0),
+            "grid_import_kwh": values.get("Grid_Consumption_Total", 0.0),
+            "grid_export_kwh": values.get("Grid_FeedIn_Total", 0.0),
         }
     except Exception as e:
         logger.error(f"Error computing today's partial data: {e}", exc_info=True)
