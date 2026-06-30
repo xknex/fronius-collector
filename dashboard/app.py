@@ -246,81 +246,77 @@ async def get_weather():
 
 @app.get("/api/inverter/health")
 async def get_inverter_health():
-    """Get inverter system health data (temperatures, status) from Fronius API via InfluxDB.
+    """Get inverter operational data directly from Fronius API.
 
-    Queries the latest inverter data. Note: temperature data requires the collector
-    to write it. This endpoint queries what's available in InfluxDB.
+    Queries CommonInverterData for AC voltage/current/frequency/power,
+    and GetInverterInfo for device status and error codes.
     """
-    if query_api is None:
-        return {"error": "InfluxDB not connected"}
-
-    # Query the Fronius inverter directly for real-time device info
     inverter_host = os.getenv("FRONIUS_INVERTER_HOST", "")
     use_https = os.getenv("FRONIUS_INVERTER_USE_HTTPS", "false").lower() in ("1", "true", "yes")
     device_id = os.getenv("FRONIUS_INVERTER_DEVICE_ID", "1")
+    verify_ssl = os.getenv("FRONIUS_INVERTER_VERIFY_SSL", "false").lower() in ("1", "true", "yes")
 
     if not inverter_host:
-        return {"error": "FRONIUS_INVERTER_HOST not configured for dashboard"}
+        return {"error": "FRONIUS_INVERTER_HOST not configured"}
 
     proto = "https" if use_https else "http"
     base = f"{proto}://{inverter_host}"
 
     data = {
-        "inverter_temp": None,
-        "ambient_temp": None,
+        "ac_voltage": None,
+        "ac_current": None,
+        "ac_frequency": None,
+        "ac_power": None,
+        "day_energy": None,
+        "year_energy": None,
+        "total_energy": None,
         "device_status": None,
         "error_code": None,
+        "inverter_model": None,
     }
 
     try:
         import requests as req
-        # CommonInverterData has temperature
+
+        # CommonInverterData — reliable on all GEN24 models
         url = f"{base}/solar_api/v1/GetInverterRealtimeData.cgi?Scope=Device&DeviceId={device_id}&DataCollection=CommonInverterData"
-        verify_ssl = os.getenv("FRONIUS_INVERTER_VERIFY_SSL", "false").lower() in ("1", "true", "yes")
         r = req.get(url, timeout=5, verify=verify_ssl)
         r.raise_for_status()
         body = r.json().get("Body", {}).get("Data", {})
 
-        # Temperature fields from Fronius API
-        if "FAC" in body:
-            pass  # Grid frequency, not needed here
-        if "IAC" in body:
-            pass  # AC current
-        if "UAC" in body:
-            pass  # AC voltage
+        def get_val(d, key):
+            v = d.get(key)
+            if isinstance(v, dict):
+                return v.get("Value")
+            return v
 
-        # Device status from GetInverterInfo
-        url_info = f"{base}/solar_api/v1/GetInverterInfo.cgi"
-        r2 = req.get(url_info, timeout=5, verify=verify_ssl)
-        r2.raise_for_status()
-        info_body = r2.json().get("Body", {}).get("Data", {})
-        if device_id in info_body or str(device_id) in info_body:
+        data["ac_voltage"] = get_val(body, "UAC")
+        data["ac_current"] = get_val(body, "IAC")
+        data["ac_frequency"] = get_val(body, "FAC")
+        data["ac_power"] = get_val(body, "PAC")
+        data["day_energy"] = get_val(body, "DAY_ENERGY")
+        data["year_energy"] = get_val(body, "YEAR_ENERGY")
+        data["total_energy"] = get_val(body, "TOTAL_ENERGY")
+
+        # Convert Wh to kWh for display
+        if data["day_energy"] is not None:
+            data["day_energy"] = round(float(data["day_energy"]) / 1000, 2)
+        if data["year_energy"] is not None:
+            data["year_energy"] = round(float(data["year_energy"]) / 1000, 1)
+        if data["total_energy"] is not None:
+            data["total_energy"] = round(float(data["total_energy"]) / 1000, 1)
+
+        # GetInverterInfo — device status and model
+        try:
+            url_info = f"{base}/solar_api/v1/GetInverterInfo.cgi"
+            r2 = req.get(url_info, timeout=5, verify=verify_ssl)
+            r2.raise_for_status()
+            info_body = r2.json().get("Body", {}).get("Data", {})
             dev_info = info_body.get(str(device_id), info_body.get(device_id, {}))
-            data["device_status"] = dev_info.get("StatusCode", None)
-            data["error_code"] = dev_info.get("ErrorCode", 0)
-
-        # 3PInverterData has more details on some models
-        url_3p = f"{base}/solar_api/v1/GetInverterRealtimeData.cgi?Scope=Device&DeviceId={device_id}&DataCollection=3PInverterData"
-        try:
-            r3 = req.get(url_3p, timeout=5, verify=verify_ssl)
-            r3.raise_for_status()
-            body_3p = r3.json().get("Body", {}).get("Data", {})
-            if "T_AMBIENT" in body_3p:
-                data["ambient_temp"] = body_3p["T_AMBIENT"].get("Value")
-            if "TEMP_POWERSTAGE" in body_3p:
-                data["inverter_temp"] = body_3p["TEMP_POWERSTAGE"].get("Value")
-        except Exception:
-            pass
-
-        # MinMaxInverterData has temperature on some models
-        url_mm = f"{base}/solar_api/v1/GetInverterRealtimeData.cgi?Scope=Device&DeviceId={device_id}&DataCollection=MinMaxInverterData"
-        try:
-            r4 = req.get(url_mm, timeout=5, verify=verify_ssl)
-            r4.raise_for_status()
-            body_mm = r4.json().get("Body", {}).get("Data", {})
-            # Some GEN24 models report temperature here
-            if "T_AMBIENT" in body_mm and data["ambient_temp"] is None:
-                data["ambient_temp"] = body_mm["T_AMBIENT"].get("Value")
+            if dev_info:
+                data["device_status"] = dev_info.get("StatusCode")
+                data["error_code"] = dev_info.get("ErrorCode", 0)
+                data["inverter_model"] = dev_info.get("CustomName") or dev_info.get("DT", None)
         except Exception:
             pass
 

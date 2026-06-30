@@ -521,7 +521,7 @@
                 </div>
             </div>
             <div style="display: flex; align-items: center; gap: 20px;">
-                <span id="weather" style="font-size: 14px; color: var(--color-text-muted);"></span>
+                <span id="weather" style="font-size: 20px; font-weight: 700; color: var(--color-text);"></span>
                 <div class="timestamp" id="timestamp">Loading...</div>
             </div>
         </header>
@@ -650,22 +650,26 @@
             </div>
 
             <div class="status-card" id="systemHealthCard">
-                <div class="status-title">System Health</div>
+                <div class="status-title">Inverter Status</div>
                 <div class="status-item">
-                    <span class="status-label">Inverter Temp</span>
-                    <span class="status-value" id="healthInverterTemp">--°C</span>
+                    <span class="status-label">AC Power</span>
+                    <span class="status-value" id="healthAcPower">-- W</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Ambient Temp</span>
-                    <span class="status-value" id="healthAmbientTemp">--°C</span>
+                    <span class="status-label">AC Voltage</span>
+                    <span class="status-value" id="healthAcVoltage">-- V</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Grid Frequency</span>
+                    <span class="status-value" id="healthFrequency">-- Hz</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Today Production</span>
+                    <span class="status-value" id="healthDayEnergy">-- kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Device Status</span>
                     <span class="status-value" id="healthDeviceStatus">--</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Error Code</span>
-                    <span class="status-value" id="healthErrorCode">--</span>
                 </div>
             </div>
 
@@ -1178,18 +1182,22 @@
                 const data = await response.json();
                 if (data.error) return;
 
-                const invTemp = document.getElementById('healthInverterTemp');
-                const ambTemp = document.getElementById('healthAmbientTemp');
+                const acPower = document.getElementById('healthAcPower');
+                const acVoltage = document.getElementById('healthAcVoltage');
+                const frequency = document.getElementById('healthFrequency');
+                const dayEnergy = document.getElementById('healthDayEnergy');
                 const devStatus = document.getElementById('healthDeviceStatus');
-                const errCode = document.getElementById('healthErrorCode');
 
-                if (invTemp) invTemp.textContent = data.inverter_temp != null ? data.inverter_temp + '°C' : '--°C';
-                if (ambTemp) ambTemp.textContent = data.ambient_temp != null ? data.ambient_temp + '°C' : '--°C';
+                if (acPower) acPower.textContent = data.ac_power != null ? Math.round(data.ac_power) + ' W' : '-- W';
+                if (acVoltage) acVoltage.textContent = data.ac_voltage != null ? Number(data.ac_voltage).toFixed(1) + ' V' : '-- V';
+                if (frequency) frequency.textContent = data.ac_frequency != null ? Number(data.ac_frequency).toFixed(2) + ' Hz' : '-- Hz';
+                if (dayEnergy) dayEnergy.textContent = data.day_energy != null ? data.day_energy + ' kWh' : '-- kWh';
                 if (devStatus) {
-                    const statusMap = {0: 'Startup', 1: 'Running', 2: 'Standby', 3: 'Bootloading', 4: 'Error'};
-                    devStatus.textContent = statusMap[data.device_status] || (data.device_status != null ? 'Code ' + data.device_status : '--');
+                    const statusMap = {0: 'Startup', 1: 'Running', 2: 'Standby', 3: 'Bootloading', 4: 'Error', 7: 'Running'};
+                    const statusText = statusMap[data.device_status] || (data.device_status != null ? 'Code ' + data.device_status : '--');
+                    const errorText = (data.error_code && data.error_code !== 0) ? ' (Error ' + data.error_code + ')' : '';
+                    devStatus.textContent = statusText + errorText;
                 }
-                if (errCode) errCode.textContent = data.error_code != null ? (data.error_code === 0 ? 'None' : data.error_code) : '--';
             } catch (error) {
                 console.warn('Inverter health fetch failed:', error);
             }

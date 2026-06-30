@@ -29,6 +29,9 @@ COPY collector_docker.py .
 COPY aggregator.py .
 COPY aggregator_tasks.py .
 
+# Copy logo for dashboard
+COPY frocol.png .
+
 # Create log directory
 RUN mkdir -p /app/logs
 
