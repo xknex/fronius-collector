@@ -640,8 +640,12 @@
                     <span class="status-value">0.00 kWh</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Battery Charged</span>
-                    <span class="status-value">0.00 kWh</span>
+                    <span class="status-label">Import Cost</span>
+                    <span class="status-value">0.00 €</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Export Income</span>
+                    <span class="status-value">0.00 €</span>
                 </div>
             </div>
 
@@ -846,14 +850,19 @@
         }
 
         // Fetch economics configuration (prices and currency)
+        let importPrice = 0.27;
+        let exportPrice = 0.0604;
+
         async function initializeEconomicsConfig() {
             try {
                 const response = await fetch('/api/config/economics');
                 const data = await response.json();
                 if (data.currency_symbol) {
                     currencySymbol = data.currency_symbol;
-                    console.log(`Currency: ${currencySymbol} (import: ${data.import_price}, export: ${data.export_price})`);
                 }
+                if (data.import_price) importPrice = data.import_price;
+                if (data.export_price) exportPrice = data.export_price;
+                console.log(`Currency: ${currencySymbol} (import: ${importPrice}, export: ${exportPrice})`);
             } catch (error) {
                 console.warn('Failed to fetch economics config:', error);
             }
@@ -1127,6 +1136,16 @@
                     if (statusItems.length > 3) {
                         statusItems[3].querySelector('.status-value').textContent = 
                             (data.grid_import || 0).toFixed(2) + ' kWh';
+                    }
+                    if (statusItems.length > 4) {
+                        const cost = ((data.grid_import || 0) * importPrice).toFixed(2);
+                        statusItems[4].querySelector('.status-value').textContent = 
+                            cost + ' ' + currencySymbol;
+                    }
+                    if (statusItems.length > 5) {
+                        const income = ((data.grid_export || 0) * exportPrice).toFixed(2);
+                        statusItems[5].querySelector('.status-value').textContent = 
+                            income + ' ' + currencySymbol;
                     }
                 }
             } catch (error) {
