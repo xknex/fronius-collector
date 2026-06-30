@@ -640,11 +640,7 @@
                     <span class="status-value">0.00 kWh</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Import Cost</span>
-                    <span class="status-value">0.00 €</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Export Income</span>
+                    <span class="status-label">Today's Cost</span>
                     <span class="status-value">0.00 €</span>
                 </div>
             </div>
@@ -1138,14 +1134,18 @@
                             (data.grid_import || 0).toFixed(2) + ' kWh';
                     }
                     if (statusItems.length > 4) {
-                        const cost = ((data.grid_import || 0) * importPrice).toFixed(2);
-                        statusItems[4].querySelector('.status-value').textContent = 
-                            cost + ' ' + currencySymbol;
-                    }
-                    if (statusItems.length > 5) {
-                        const income = ((data.grid_export || 0) * exportPrice).toFixed(2);
-                        statusItems[5].querySelector('.status-value').textContent = 
-                            income + ' ' + currencySymbol;
+                        const importCost = (data.grid_import || 0) * importPrice;
+                        const exportIncome = (data.grid_export || 0) * exportPrice;
+                        const net = exportIncome - importCost;
+                        if (net >= 0) {
+                            statusItems[4].querySelector('.status-label').textContent = "Today's Earnings";
+                            statusItems[4].querySelector('.status-value').textContent = 
+                                net.toFixed(2) + ' ' + currencySymbol;
+                        } else {
+                            statusItems[4].querySelector('.status-label').textContent = "Today's Cost";
+                            statusItems[4].querySelector('.status-value').textContent = 
+                                Math.abs(net).toFixed(2) + ' ' + currencySymbol;
+                        }
                     }
                 }
             } catch (error) {
