@@ -819,6 +819,37 @@ async def get_grid_balance(range: str = "7d"):
             import_by_key[current_month_key] = import_by_key.get(current_month_key, 0.0) + today_partial["grid_import_kwh"]
             export_by_key[current_month_key] = export_by_key.get(current_month_key, 0.0) + today_partial["grid_export_kwh"]
 
+        # Fallback: if no aggregated autonomy data, query raw Autonomy_Percentage
+        # using aggregateWindow(mean) — this is lightweight (returns 1 value per window)
+        if not autonomy_by_key:
+            agg_window = "1d" if bucket_type == "day" else "30d"
+            query_autonomy = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -{range_days}d)
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Autonomy_Percentage")
+  |> aggregateWindow(every: {agg_window}, fn: mean, createEmpty: false)
+  |> sort(columns: ["_time"])'''
+            try:
+                autonomy_result = query_api.query(query_autonomy)
+                for table in autonomy_result:
+                    for rec in table.records:
+                        val = rec.get_value()
+                        if val is None:
+                            continue
+                        local_ts = to_local_time(rec.get_time())
+                        if bucket_type == "day":
+                            key = local_ts.strftime("%Y-%m-%d")
+                        else:
+                            key = local_ts.strftime("%Y-%m")
+                        # For day bucket: keep the value per local day (may get multiple
+                        # UTC-day windows mapping to the same local day — average them)
+                        if key in autonomy_by_key:
+                            autonomy_by_key[key] = (autonomy_by_key[key] + float(val)) / 2
+                        else:
+                            autonomy_by_key[key] = float(val)
+            except Exception as e:
+                logger.warning(f"Autonomy fallback query failed: {e}")
+
         # Build expected bucket keys and labels
         if bucket_type == "day":
             ts_keys = [(now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d")
