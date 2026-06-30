@@ -220,6 +220,115 @@ async def favicon():
     from fastapi.responses import FileResponse
     return FileResponse(DASHBOARD_DIR / "favicon.svg", media_type="image/svg+xml")
 
+@app.get("/logo.png")
+async def logo():
+    """Serve the logo image."""
+    from fastapi.responses import FileResponse
+    logo_path = DASHBOARD_DIR.parent / "frocol.png"
+    return FileResponse(logo_path, media_type="image/png")
+
+@app.get("/api/weather")
+async def get_weather():
+    """Get current weather from wttr.in for the configured location."""
+    import subprocess
+    location = os.getenv("WEATHER_LOCATION", "Kranichfeld")
+    try:
+        result = subprocess.run(
+            ["curl", "-s", f"wttr.in/{location}?format=3"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return {"weather": result.stdout.strip(), "location": location}
+        return {"weather": None, "location": location}
+    except Exception as e:
+        logger.warning(f"Weather fetch failed: {e}")
+        return {"weather": None, "location": location}
+
+@app.get("/api/inverter/health")
+async def get_inverter_health():
+    """Get inverter system health data (temperatures, status) from Fronius API via InfluxDB.
+
+    Queries the latest inverter data. Note: temperature data requires the collector
+    to write it. This endpoint queries what's available in InfluxDB.
+    """
+    if query_api is None:
+        return {"error": "InfluxDB not connected"}
+
+    # Query the Fronius inverter directly for real-time device info
+    inverter_host = os.getenv("FRONIUS_INVERTER_HOST", "")
+    use_https = os.getenv("FRONIUS_INVERTER_USE_HTTPS", "false").lower() in ("1", "true", "yes")
+    device_id = os.getenv("FRONIUS_INVERTER_DEVICE_ID", "1")
+
+    if not inverter_host:
+        return {"error": "FRONIUS_INVERTER_HOST not configured for dashboard"}
+
+    proto = "https" if use_https else "http"
+    base = f"{proto}://{inverter_host}"
+
+    data = {
+        "inverter_temp": None,
+        "ambient_temp": None,
+        "device_status": None,
+        "error_code": None,
+    }
+
+    try:
+        import requests as req
+        # CommonInverterData has temperature
+        url = f"{base}/solar_api/v1/GetInverterRealtimeData.cgi?Scope=Device&DeviceId={device_id}&DataCollection=CommonInverterData"
+        verify_ssl = os.getenv("FRONIUS_INVERTER_VERIFY_SSL", "false").lower() in ("1", "true", "yes")
+        r = req.get(url, timeout=5, verify=verify_ssl)
+        r.raise_for_status()
+        body = r.json().get("Body", {}).get("Data", {})
+
+        # Temperature fields from Fronius API
+        if "FAC" in body:
+            pass  # Grid frequency, not needed here
+        if "IAC" in body:
+            pass  # AC current
+        if "UAC" in body:
+            pass  # AC voltage
+
+        # Device status from GetInverterInfo
+        url_info = f"{base}/solar_api/v1/GetInverterInfo.cgi"
+        r2 = req.get(url_info, timeout=5, verify=verify_ssl)
+        r2.raise_for_status()
+        info_body = r2.json().get("Body", {}).get("Data", {})
+        if device_id in info_body or str(device_id) in info_body:
+            dev_info = info_body.get(str(device_id), info_body.get(device_id, {}))
+            data["device_status"] = dev_info.get("StatusCode", None)
+            data["error_code"] = dev_info.get("ErrorCode", 0)
+
+        # 3PInverterData has more details on some models
+        url_3p = f"{base}/solar_api/v1/GetInverterRealtimeData.cgi?Scope=Device&DeviceId={device_id}&DataCollection=3PInverterData"
+        try:
+            r3 = req.get(url_3p, timeout=5, verify=verify_ssl)
+            r3.raise_for_status()
+            body_3p = r3.json().get("Body", {}).get("Data", {})
+            if "T_AMBIENT" in body_3p:
+                data["ambient_temp"] = body_3p["T_AMBIENT"].get("Value")
+            if "TEMP_POWERSTAGE" in body_3p:
+                data["inverter_temp"] = body_3p["TEMP_POWERSTAGE"].get("Value")
+        except Exception:
+            pass
+
+        # MinMaxInverterData has temperature on some models
+        url_mm = f"{base}/solar_api/v1/GetInverterRealtimeData.cgi?Scope=Device&DeviceId={device_id}&DataCollection=MinMaxInverterData"
+        try:
+            r4 = req.get(url_mm, timeout=5, verify=verify_ssl)
+            r4.raise_for_status()
+            body_mm = r4.json().get("Body", {}).get("Data", {})
+            # Some GEN24 models report temperature here
+            if "T_AMBIENT" in body_mm and data["ambient_temp"] is None:
+                data["ambient_temp"] = body_mm["T_AMBIENT"].get("Value")
+        except Exception:
+            pass
+
+        return data
+    except Exception as e:
+        logger.warning(f"Inverter health query failed: {e}")
+        return {"error": str(e)}
+
 @app.get("/api/health")
 async def health_check():
     """Detailed health check endpoint with latency and system info."""

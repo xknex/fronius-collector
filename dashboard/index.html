@@ -513,13 +513,17 @@
     <div class="container">
         <header>
             <div class="header-left">
+                <img src="/logo.png" alt="Fronius Collector" style="height: 40px; border-radius: 4px;">
                 <h1>Fronius Energy Dashboard</h1>
                 <div class="status-indicator" id="statusIndicator" title="Click for system status">
                     <span class="status-dot"></span>
                     <span>System Status</span>
                 </div>
             </div>
-            <div class="timestamp" id="timestamp">Loading...</div>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <span id="weather" style="font-size: 14px; color: var(--color-text-muted);"></span>
+                <div class="timestamp" id="timestamp">Loading...</div>
+            </div>
         </header>
 
         <!-- Status Modal -->
@@ -645,23 +649,23 @@
                 </div>
             </div>
 
-            <div class="status-card">
+            <div class="status-card" id="systemHealthCard">
                 <div class="status-title">System Health</div>
                 <div class="status-item">
                     <span class="status-label">Inverter Temp</span>
-                    <span class="status-value">--°C</span>
+                    <span class="status-value" id="healthInverterTemp">--°C</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Battery Temp</span>
-                    <span class="status-value">--°C</span>
+                    <span class="status-label">Ambient Temp</span>
+                    <span class="status-value" id="healthAmbientTemp">--°C</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">System Load</span>
-                    <span class="status-value">--%</span>
+                    <span class="status-label">Device Status</span>
+                    <span class="status-value" id="healthDeviceStatus">--</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Last Update</span>
-                    <span class="status-value">Just now</span>
+                    <span class="status-label">Error Code</span>
+                    <span class="status-value" id="healthErrorCode">--</span>
                 </div>
             </div>
 
@@ -1153,6 +1157,44 @@
             }
         }
 
+        // Fetch weather info
+        async function updateWeather() {
+            try {
+                const response = await fetch('/api/weather');
+                const data = await response.json();
+                const el = document.getElementById('weather');
+                if (el && data.weather) {
+                    el.textContent = data.weather;
+                }
+            } catch (error) {
+                console.warn('Weather fetch failed:', error);
+            }
+        }
+
+        // Fetch inverter system health
+        async function updateInverterHealth() {
+            try {
+                const response = await fetch('/api/inverter/health');
+                const data = await response.json();
+                if (data.error) return;
+
+                const invTemp = document.getElementById('healthInverterTemp');
+                const ambTemp = document.getElementById('healthAmbientTemp');
+                const devStatus = document.getElementById('healthDeviceStatus');
+                const errCode = document.getElementById('healthErrorCode');
+
+                if (invTemp) invTemp.textContent = data.inverter_temp != null ? data.inverter_temp + '°C' : '--°C';
+                if (ambTemp) ambTemp.textContent = data.ambient_temp != null ? data.ambient_temp + '°C' : '--°C';
+                if (devStatus) {
+                    const statusMap = {0: 'Startup', 1: 'Running', 2: 'Standby', 3: 'Bootloading', 4: 'Error'};
+                    devStatus.textContent = statusMap[data.device_status] || (data.device_status != null ? 'Code ' + data.device_status : '--');
+                }
+                if (errCode) errCode.textContent = data.error_code != null ? (data.error_code === 0 ? 'None' : data.error_code) : '--';
+            } catch (error) {
+                console.warn('Inverter health fetch failed:', error);
+            }
+        }
+
         // Initialize charts with dynamic theming from CSS custom properties
         async function initCharts() {
             // Apply Chart.js global defaults from CSS tokens
@@ -1393,6 +1435,8 @@
             await updateEconomicsChart("7d");
             await updateGridBalance("7d");
             await updateTodayStats();
+            await updateWeather();
+            await updateInverterHealth();
         }
 
         // Initialize on page load
@@ -1438,6 +1482,8 @@
             setInterval(update7dChart, 300000);            // Update economics chart every 5 minutes
             setInterval(updateTodayStats, 120000);         // Update today stats every 2 minutes
             setInterval(() => updateGridBalance(currentGridBalanceRange), 120000); // Update grid balance every 2 minutes
+            setInterval(updateWeather, 600000);            // Update weather every 10 minutes
+            setInterval(updateInverterHealth, 60000);      // Update inverter health every 60 seconds
         })();
     </script>
 </body>
