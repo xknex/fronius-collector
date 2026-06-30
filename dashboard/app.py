@@ -733,6 +733,83 @@ async def get_today_stats():
         logger.error(f"Error querying today stats: {e}")
         return {"error": str(e)}
 
+@app.get("/api/data/balance")
+async def get_grid_balance(range: str = "today"):
+    """Return grid import and export totals for a selectable time range.
+
+    Ranges:
+    - today: current day (partial, from raw data)
+    - 7d: last 7 days summed
+    - 1month: last 30 days summed
+    - 1year: last 12 months summed
+    """
+    time_range = range
+
+    if query_api is None:
+        return {"error": "InfluxDB not connected"}
+
+    AGG_PREFIX = os.getenv("AGGREGATION_MEASUREMENT_PREFIX", "fronius_agg")
+
+    try:
+        if time_range == "today":
+            # Use the two-point query for today's partial data
+            today_data = get_today_partial()
+            return {
+                "grid_import": round(today_data["grid_import_kwh"], 2),
+                "grid_export": round(today_data["grid_export_kwh"], 2),
+                "range": "today",
+                "label": "Today"
+            }
+
+        # For other ranges, sum from aggregated measurements
+        cfg_map = {
+            "7d":     {"range_days": 8,   "measurement": f"{AGG_PREFIX}_daily",   "label": "Last 7 Days"},
+            "1month": {"range_days": 31,  "measurement": f"{AGG_PREFIX}_daily",   "label": "Last 30 Days"},
+            "1year":  {"range_days": 366, "measurement": f"{AGG_PREFIX}_monthly", "label": "Last 12 Months"},
+        }
+
+        if time_range not in cfg_map:
+            return {"error": f"Invalid range. Supported: today, {', '.join(cfg_map.keys())}"}
+
+        range_days = cfg_map[time_range]["range_days"]
+        measurement = cfg_map[time_range]["measurement"]
+        label = cfg_map[time_range]["label"]
+
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: -{range_days}d)
+  |> filter(fn: (r) => r["_measurement"] == "{measurement}")
+  |> filter(fn: (r) => r["_field"] == "grid_import_kwh" or r["_field"] == "grid_export_kwh")
+  |> sum()'''
+
+        result = query_api.query(query)
+
+        grid_import = 0.0
+        grid_export = 0.0
+        for table in result:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field == "grid_import_kwh" and value is not None:
+                    grid_import = float(value)
+                elif field == "grid_export_kwh" and value is not None:
+                    grid_export = float(value)
+
+        # For 7d and 1month, also add today's partial
+        if time_range in ("7d", "1month"):
+            today_data = get_today_partial()
+            grid_import += today_data["grid_import_kwh"]
+            grid_export += today_data["grid_export_kwh"]
+
+        return {
+            "grid_import": round(grid_import, 2),
+            "grid_export": round(grid_export, 2),
+            "range": time_range,
+            "label": label
+        }
+    except Exception as e:
+        logger.error(f"Error querying grid balance for range {time_range}: {e}", exc_info=True)
+        return {"error": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("DASHBOARD_PORT", "8080"))

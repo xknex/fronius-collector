@@ -604,8 +604,14 @@
             </div>
 
             <div class="chart-card">
-                <div class="chart-header">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div class="chart-title">Grid Balance</div>
+                    <div class="timeframe-selector">
+                        <button class="timeframe-btn active" data-range="today">1D</button>
+                        <button class="timeframe-btn" data-range="7d">7D</button>
+                        <button class="timeframe-btn" data-range="1month">1M</button>
+                        <button class="timeframe-btn" data-range="1year">1Y</button>
+                    </div>
                 </div>
                 <div class="chart-container">
                     <canvas id="gridChart"></canvas>
@@ -1052,6 +1058,45 @@
             await updateEconomicsChart(currentEconomicsRange);
         }
 
+        // Track current grid balance range
+        let currentGridBalanceRange = "today";
+
+        // Fetch grid balance data and update chart
+        async function updateGridBalance(range = "today") {
+            try {
+                currentGridBalanceRange = range;
+                const response = await fetch(`/api/data/balance?range=${range}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    return;
+                }
+
+                const gridImport = data.grid_import || 0;
+                const gridExport = data.grid_export || 0;
+
+                if (gridChart) {
+                    gridChart.data.datasets[0].data = [gridImport, gridExport];
+                    gridChart.data.datasets[0].label = `${data.label || range} (kWh)`;
+                    gridChart.update();
+                }
+
+                // Update active button state for grid balance chart
+                document.querySelectorAll('[data-range="today"], [data-range="7d"], [data-range="1month"], [data-range="1year"]').forEach(btn => {
+                    const isGridButton = btn.closest('.chart-card')?.querySelector('.chart-title')?.textContent.includes('Grid Balance');
+                    if (isGridButton) {
+                        btn.classList.remove('active');
+                        if (btn.dataset.range === range) {
+                            btn.classList.add('active');
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to fetch grid balance:', error);
+            }
+        }
+
         // Fetch today stats and update grid balance
         async function updateTodayStats() {
             try {
@@ -1063,12 +1108,14 @@
                     return;
                 }
 
-                // Update grid balance chart
-                const gridImport = data.grid_import || 0;
-                const gridExport = data.grid_export || 0;
-                if (gridChart) {
-                    gridChart.data.datasets[0].data = [gridImport, gridExport];
-                    gridChart.update('none');
+                // Update grid balance chart (only if currently showing "today")
+                if (currentGridBalanceRange === "today") {
+                    const gridImport = data.grid_import || 0;
+                    const gridExport = data.grid_export || 0;
+                    if (gridChart) {
+                        gridChart.data.datasets[0].data = [gridImport, gridExport];
+                        gridChart.update('none');
+                    }
                 }
 
                 // Update status panels
@@ -1085,11 +1132,11 @@
                     }
                     if (statusItems.length > 2) {
                         statusItems[2].querySelector('.status-value').textContent = 
-                            gridExport.toFixed(2) + ' kWh';
+                            (data.grid_export || 0).toFixed(2) + ' kWh';
                     }
                     if (statusItems.length > 3) {
                         statusItems[3].querySelector('.status-value').textContent = 
-                            gridImport.toFixed(2) + ' kWh';
+                            (data.grid_import || 0).toFixed(2) + ' kWh';
                     }
                 }
             } catch (error) {
@@ -1311,6 +1358,9 @@
                     } else if (cardTitle.includes('Grid Economics')) {
                         console.log(`Updating economics chart to ${range}`);
                         await updateEconomicsChart(range);
+                    } else if (cardTitle.includes('Grid Balance')) {
+                        console.log(`Updating grid balance to ${range}`);
+                        await updateGridBalance(range);
                     } else {
                         console.log(`Unknown chart type: ${cardTitle}`);
                     }
@@ -1322,6 +1372,7 @@
             setInterval(update24hChart, 60000);            // Update power chart every 60 seconds
             setInterval(update7dChart, 300000);            // Update economics chart every 5 minutes
             setInterval(updateTodayStats, 120000);         // Update today stats every 2 minutes
+            setInterval(() => updateGridBalance(currentGridBalanceRange), 120000); // Update grid balance every 2 minutes
         })();
     </script>
 </body>
