@@ -719,54 +719,39 @@ async def get_today_stats():
 
         today_start_utc = local_midnight.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        fields_filter = ('r["_field"] == "Solar_Produced_Total" or '
-                         'r["_field"] == "Consumption_Total" or '
-                         'r["_field"] == "Grid_FeedIn_Total" or '
-                         'r["_field"] == "Grid_Consumption_Total"')
-
-        # Query first values of today
-        query_first = f'''from(bucket: "{INFLUX_BUCKET}")
+        # Use spread() (max - min) for cumulative counters — gives today's delta
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: {today_start_utc})
   |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => {fields_filter})
-  |> first()'''
+  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Total" or r["_field"] == "Consumption_Total" or r["_field"] == "Grid_FeedIn_Total" or r["_field"] == "Grid_Consumption_Total")
+  |> spread()'''
 
-        # Query last (latest) values of today
-        query_last = f'''from(bucket: "{INFLUX_BUCKET}")
-  |> range(start: {today_start_utc})
-  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
-  |> filter(fn: (r) => {fields_filter})
-  |> last()'''
+        result = query_api.query(query)
 
-        result_first = query_api.query(query_first)
-        result_last = query_api.query(query_last)
-
-        first_values = {}
-        for table in result_first:
-            for record in table.records:
-                field = record.values.get("_field")
-                value = record.get_value()
-                if field and value is not None:
-                    first_values[field] = float(value)
-
-        last_values = {}
-        for table in result_last:
-            for record in table.records:
-                field = record.values.get("_field")
-                value = record.get_value()
-                if field and value is not None:
-                    last_values[field] = float(value)
-
-        # Compute deltas (today's actual usage)
-        def delta(field_name):
-            return max(0.0, last_values.get(field_name, 0.0) - first_values.get(field_name, 0.0))
-
-        return {
-            "solar_production": round(delta("Solar_Produced_Total"), 2),
-            "consumption": round(delta("Consumption_Total"), 2),
-            "grid_export": round(delta("Grid_FeedIn_Total"), 2),
-            "grid_import": round(delta("Grid_Consumption_Total"), 2),
+        data = {
+            "solar_production": 0.0,
+            "consumption": 0.0,
+            "grid_export": 0.0,
+            "grid_import": 0.0,
         }
+
+        for table in result:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if value is None:
+                    continue
+                val = max(0.0, float(value))
+                if field == "Solar_Produced_Total":
+                    data["solar_production"] = round(val, 2)
+                elif field == "Consumption_Total":
+                    data["consumption"] = round(val, 2)
+                elif field == "Grid_FeedIn_Total":
+                    data["grid_export"] = round(val, 2)
+                elif field == "Grid_Consumption_Total":
+                    data["grid_import"] = round(val, 2)
+
+        return data
     except Exception as e:
         logger.error(f"Error querying today stats: {e}")
         return {"error": str(e)}
