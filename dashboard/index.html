@@ -677,27 +677,27 @@
                 </div>
             </div>
 
-            <div class="status-card">
+            <div class="status-card" id="monthlySummaryCard">
                 <div class="status-title">Monthly Summary</div>
                 <div class="status-item">
                     <span class="status-label">Solar Production</span>
-                    <span class="status-value">0 kWh</span>
+                    <span class="status-value" id="monthlySolar">-- kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Grid Export</span>
-                    <span class="status-value">0 kWh</span>
+                    <span class="status-value" id="monthlyExport">-- kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Grid Import</span>
-                    <span class="status-value">0 kWh</span>
+                    <span class="status-value" id="monthlyImport">-- kWh</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Self-Consumption</span>
-                    <span class="status-value">0%</span>
+                    <span class="status-value" id="monthlySelfConsumption">--%</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">CO₂ Avoided</span>
-                    <span class="status-value">0 kg</span>
+                    <span class="status-value" id="monthlyCO2">-- kg</span>
                 </div>
             </div>
         </div>
@@ -1165,6 +1165,29 @@
             }
         }
 
+        // Fetch monthly summary
+        async function updateMonthlySummary() {
+            try {
+                const response = await fetch('/api/data/monthly');
+                const data = await response.json();
+                if (data.error) return;
+
+                const solar = document.getElementById('monthlySolar');
+                const exp = document.getElementById('monthlyExport');
+                const imp = document.getElementById('monthlyImport');
+                const selfCons = document.getElementById('monthlySelfConsumption');
+                const co2 = document.getElementById('monthlyCO2');
+
+                if (solar) solar.textContent = (data.solar_production || 0).toFixed(1) + ' kWh';
+                if (exp) exp.textContent = (data.grid_export || 0).toFixed(1) + ' kWh';
+                if (imp) imp.textContent = (data.grid_import || 0).toFixed(1) + ' kWh';
+                if (selfCons) selfCons.textContent = (data.self_consumption || 0).toFixed(1) + '%';
+                if (co2) co2.textContent = (data.co2_avoided || 0).toFixed(1) + ' kg';
+            } catch (error) {
+                console.warn('Monthly summary fetch failed:', error);
+            }
+        }
+
         // Fetch weather info
         async function updateWeather() {
             try {
@@ -1460,6 +1483,7 @@
             await updateTodayStats();
             await updateWeather();
             await updateInverterHealth();
+            await updateMonthlySummary();
         }
 
         // Initialize on page load
@@ -1507,6 +1531,7 @@
             setInterval(() => updateGridBalance(currentGridBalanceRange), 120000); // Update grid balance every 2 minutes
             setInterval(updateWeather, 600000);            // Update weather every 10 minutes
             setInterval(updateInverterHealth, 60000);      // Update inverter health every 60 seconds
+            setInterval(updateMonthlySummary, 300000);     // Update monthly summary every 5 minutes
         })();
     </script>
 </body>

@@ -830,6 +830,62 @@ async def get_today_stats():
         logger.error(f"Error querying today stats: {e}")
         return {"error": str(e)}
 
+@app.get("/api/data/monthly")
+async def get_monthly_stats():
+    """Get current month's energy statistics using spread() from raw data."""
+    if query_api is None:
+        return {"error": "InfluxDB not connected"}
+
+    try:
+        # Calculate start of current month in UTC
+        now_local = to_local_time(datetime.now(timezone.utc))
+        if LOCAL_TZ:
+            month_start = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        month_start_utc = month_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Use spread() for cumulative counters this month
+        query = f'''from(bucket: "{INFLUX_BUCKET}")
+  |> range(start: {month_start_utc})
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => r["_field"] == "Solar_Produced_Total" or r["_field"] == "Grid_FeedIn_Total" or r["_field"] == "Grid_Consumption_Total")
+  |> spread()'''
+
+        result = query_api.query(query)
+
+        values = {}
+        for table in result:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field and value is not None:
+                    values[field] = max(0.0, float(value))
+
+        solar = values.get("Solar_Produced_Total", 0.0)
+        grid_export = values.get("Grid_FeedIn_Total", 0.0)
+        grid_import = values.get("Grid_Consumption_Total", 0.0)
+
+        # Self-consumption: solar produced minus what was exported
+        self_consumed = max(0.0, solar - grid_export)
+        self_consumption_pct = round((self_consumed / solar) * 100, 1) if solar > 0 else 0.0
+
+        # CO2 avoided: standard factor 0.4 kg CO2 per kWh solar produced
+        co2_factor = float(os.getenv("CO2_FACTOR", "0.4"))
+        co2_avoided = round(solar * co2_factor, 1)
+
+        return {
+            "solar_production": round(solar, 2),
+            "grid_export": round(grid_export, 2),
+            "grid_import": round(grid_import, 2),
+            "self_consumption": self_consumption_pct,
+            "co2_avoided": co2_avoided,
+        }
+    except Exception as e:
+        logger.error(f"Error querying monthly stats: {e}")
+        return {"error": str(e)}
+
 @app.get("/api/data/balance")
 async def get_grid_balance(range: str = "7d"):
     """Return per-day or per-month grid import and export kWh values.
