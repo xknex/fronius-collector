@@ -214,6 +214,12 @@ async def root():
     with open(DASHBOARD_DIR / "index.html", "r") as f:
         return f.read()
 
+@app.get("/favicon.svg")
+async def favicon():
+    """Serve the favicon."""
+    from fastapi.responses import FileResponse
+    return FileResponse(DASHBOARD_DIR / "favicon.svg", media_type="image/svg+xml")
+
 @app.get("/api/health")
 async def health_check():
     """Detailed health check endpoint with latency and system info."""
