@@ -246,10 +246,10 @@ async def get_weather():
 
 @app.get("/api/inverter/health")
 async def get_inverter_health():
-    """Get inverter operational data directly from Fronius API.
+    """Get system status data directly from Fronius API.
 
-    Queries CommonInverterData for AC voltage/current/frequency/power,
-    and GetInverterInfo for device status and error codes.
+    Queries CommonInverterData for AC voltage/frequency/power,
+    GetInverterInfo for device status, and GetStorageRealtimeData for battery temperature.
     """
     inverter_host = os.getenv("FRONIUS_INVERTER_HOST", "")
     use_https = os.getenv("FRONIUS_INVERTER_USE_HTTPS", "false").lower() in ("1", "true", "yes")
@@ -264,21 +264,18 @@ async def get_inverter_health():
 
     data = {
         "ac_voltage": None,
-        "ac_current": None,
         "ac_frequency": None,
         "ac_power": None,
         "day_energy": None,
-        "year_energy": None,
-        "total_energy": None,
         "device_status": None,
         "error_code": None,
-        "inverter_model": None,
+        "battery_temp": None,
     }
 
     try:
         import requests as req
 
-        # CommonInverterData — reliable on all GEN24 models
+        # CommonInverterData — AC power, voltage, frequency
         url = f"{base}/solar_api/v1/GetInverterRealtimeData.cgi?Scope=Device&DeviceId={device_id}&DataCollection=CommonInverterData"
         r = req.get(url, timeout=5, verify=verify_ssl)
         r.raise_for_status()
@@ -291,32 +288,31 @@ async def get_inverter_health():
             return v
 
         data["ac_voltage"] = get_val(body, "UAC")
-        data["ac_current"] = get_val(body, "IAC")
         data["ac_frequency"] = get_val(body, "FAC")
         data["ac_power"] = get_val(body, "PAC")
         data["day_energy"] = get_val(body, "DAY_ENERGY")
-        data["year_energy"] = get_val(body, "YEAR_ENERGY")
-        data["total_energy"] = get_val(body, "TOTAL_ENERGY")
 
-        # Convert Wh to kWh for display
-        if data["day_energy"] is not None:
-            data["day_energy"] = round(float(data["day_energy"]) / 1000, 2)
-        if data["year_energy"] is not None:
-            data["year_energy"] = round(float(data["year_energy"]) / 1000, 1)
-        if data["total_energy"] is not None:
-            data["total_energy"] = round(float(data["total_energy"]) / 1000, 1)
+        # DAY_ENERGY is null on GEN24 — use today's spread from InfluxDB instead
+        # (handled by the frontend from /api/data/today)
 
-        # GetInverterInfo — device status and model
+        # DeviceStatus from CommonInverterData response
+        dev_status = body.get("DeviceStatus", {})
+        if dev_status:
+            data["device_status"] = dev_status.get("StatusCode")
+            data["error_code"] = dev_status.get("ErrorCode", 0)
+
+        # GetStorageRealtimeData — battery temperature
         try:
-            url_info = f"{base}/solar_api/v1/GetInverterInfo.cgi"
-            r2 = req.get(url_info, timeout=5, verify=verify_ssl)
-            r2.raise_for_status()
-            info_body = r2.json().get("Body", {}).get("Data", {})
-            dev_info = info_body.get(str(device_id), info_body.get(device_id, {}))
-            if dev_info:
-                data["device_status"] = dev_info.get("StatusCode")
-                data["error_code"] = dev_info.get("ErrorCode", 0)
-                data["inverter_model"] = dev_info.get("CustomName") or dev_info.get("DT", None)
+            url_storage = f"{base}/solar_api/v1/GetStorageRealtimeData.cgi?Scope=System"
+            r3 = req.get(url_storage, timeout=5, verify=verify_ssl)
+            r3.raise_for_status()
+            storage_body = r3.json().get("Body", {}).get("Data", {})
+            # Iterate storage devices to find Temperature_Cell
+            for dev_key, dev_data in storage_body.items():
+                controller = dev_data.get("Controller", {})
+                if "Temperature_Cell" in controller:
+                    data["battery_temp"] = controller["Temperature_Cell"]
+                    break
         except Exception:
             pass
 

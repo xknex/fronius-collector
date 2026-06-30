@@ -650,7 +650,7 @@
             </div>
 
             <div class="status-card" id="systemHealthCard">
-                <div class="status-title">Inverter Status</div>
+                <div class="status-title">System Status</div>
                 <div class="status-item">
                     <span class="status-label">AC Power</span>
                     <span class="status-value" id="healthAcPower">-- W</span>
@@ -666,6 +666,10 @@
                 <div class="status-item">
                     <span class="status-label">Today Production</span>
                     <span class="status-value" id="healthDayEnergy">-- kWh</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Battery Temp</span>
+                    <span class="status-value" id="healthBatteryTemp">--°C</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Device Status</span>
@@ -1186,14 +1190,22 @@
                 const acVoltage = document.getElementById('healthAcVoltage');
                 const frequency = document.getElementById('healthFrequency');
                 const dayEnergy = document.getElementById('healthDayEnergy');
+                const batteryTemp = document.getElementById('healthBatteryTemp');
                 const devStatus = document.getElementById('healthDeviceStatus');
 
                 if (acPower) acPower.textContent = data.ac_power != null ? Math.round(data.ac_power) + ' W' : '-- W';
                 if (acVoltage) acVoltage.textContent = data.ac_voltage != null ? Number(data.ac_voltage).toFixed(1) + ' V' : '-- V';
                 if (frequency) frequency.textContent = data.ac_frequency != null ? Number(data.ac_frequency).toFixed(2) + ' Hz' : '-- Hz';
-                if (dayEnergy) dayEnergy.textContent = data.day_energy != null ? data.day_energy + ' kWh' : '-- kWh';
+                if (batteryTemp) batteryTemp.textContent = data.battery_temp != null ? Number(data.battery_temp).toFixed(1) + '°C' : '--°C';
+
+                // DAY_ENERGY is null on GEN24, use today stats instead
+                if (data.day_energy != null) {
+                    if (dayEnergy) dayEnergy.textContent = data.day_energy + ' kWh';
+                }
+                // (today production is also updated by updateTodayStats via the status card)
+
                 if (devStatus) {
-                    const statusMap = {0: 'Startup', 1: 'Running', 2: 'Standby', 3: 'Bootloading', 4: 'Error', 7: 'Running'};
+                    const statusMap = {0: 'Startup', 7: 'Running', 8: 'Standby', 9: 'Bootloading', 10: 'Error', 11: 'Idle', 12: 'Ready', 13: 'Sleeping'};
                     const statusText = statusMap[data.device_status] || (data.device_status != null ? 'Code ' + data.device_status : '--');
                     const errorText = (data.error_code && data.error_code !== 0) ? ' (Error ' + data.error_code + ')' : '';
                     devStatus.textContent = statusText + errorText;
