@@ -1076,6 +1076,7 @@
                     gridChart.data.labels = data.labels || [];
                     gridChart.data.datasets[0].data = data.import_kwh || [];
                     gridChart.data.datasets[1].data = data.export_kwh || [];
+                    gridChart.data.datasets[2].data = data.autonomy || [];
                     gridChart.update();
                 }
 
@@ -1278,7 +1279,7 @@
                 }
             });
 
-            // Grid Balance Chart (same structure as Economics but shows kWh)
+            // Grid Balance Chart (same structure as Economics but shows kWh + autonomy line)
             const gridCtx = document.getElementById('gridChart').getContext('2d');
             gridChart = new Chart(gridCtx, {
                 type: 'bar',
@@ -1289,13 +1290,29 @@
                             label: 'Import (kWh)',
                             data: [],
                             backgroundColor: colorConsumption,
-                            borderRadius: 4
+                            borderRadius: 4,
+                            order: 2
                         },
                         {
                             label: 'Export (kWh)',
                             data: [],
                             backgroundColor: colorSuccess,
-                            borderRadius: 4
+                            borderRadius: 4,
+                            order: 2
+                        },
+                        {
+                            label: 'Autonomy (%)',
+                            data: [],
+                            type: 'line',
+                            borderColor: colorGrid,
+                            backgroundColor: withAlpha(colorGrid, 0.1),
+                            tension: 0.4,
+                            fill: true,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: colorGrid,
+                            yAxisID: 'y1',
+                            order: 1
                         }
                     ]
                 },
@@ -1303,6 +1320,10 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     indexAxis: 'x',
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     scales: {
                         x: {
                             ticks: {
@@ -1314,7 +1335,15 @@
                         },
                         y: {
                             beginAtZero: true,
+                            position: 'left',
                             title: { display: true, text: 'Energy (kWh)' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            max: 100,
+                            position: 'right',
+                            title: { display: true, text: 'Autonomy (%)' },
+                            grid: { drawOnChartArea: false }
                         }
                     },
                     plugins: {
@@ -1326,6 +1355,9 @@
                             callbacks: {
                                 label: function(context) {
                                     const value = context.parsed.y || 0;
+                                    if (context.dataset.yAxisID === 'y1') {
+                                        return `${context.dataset.label}: ${value.toFixed(1)}%`;
+                                    }
                                     return `${context.dataset.label}: ${value.toFixed(2)} kWh`;
                                 }
                             }

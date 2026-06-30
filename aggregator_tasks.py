@@ -38,6 +38,13 @@ PEAK_FIELDS = [
     "Battery_Discharging",
 ]
 
+# Fields to compute mean() for average values
+MEAN_FIELDS = ["Autonomy_Percentage"]
+
+MEAN_TO_AGG = {
+    "Autonomy_Percentage": "avg_autonomy_pct",
+}
+
 # Mapping from raw field names to aggregated field names
 CUMULATIVE_TO_AGG = {
     "Grid_Consumption_Total": "grid_import_kwh",
@@ -129,6 +136,31 @@ def aggregate_day(client: InfluxDBClient, cfg: Config, d: date) -> Optional[Dict
     for agg_field in PEAK_TO_AGG.values():
         result.setdefault(agg_field, 0.0)
 
+    # --- Average values via mean() ---
+    mean_filter = " or ".join(
+        f'r["_field"] == "{f}"' for f in MEAN_FIELDS
+    )
+    query_mean = f'''from(bucket: "{cfg.influx_bucket}")
+  |> range(start: {start_str}, stop: {stop_str})
+  |> filter(fn: (r) => r["_measurement"] == "fronius_clean")
+  |> filter(fn: (r) => {mean_filter})
+  |> mean()'''
+
+    try:
+        tables = query_api.query(query_mean)
+        for table in tables:
+            for record in table.records:
+                field = record.values.get("_field")
+                value = record.get_value()
+                if field in MEAN_TO_AGG and value is not None:
+                    result[MEAN_TO_AGG[field]] = round(float(value), 2)
+    except Exception as e:
+        log_warn(f"Flux mean query failed for {d}: {e}")
+
+    # Ensure all mean fields have a value
+    for agg_field in MEAN_TO_AGG.values():
+        result.setdefault(agg_field, 0.0)
+
     # Ensure energy fields have a value
     for agg_field in CUMULATIVE_TO_AGG.values():
         result.setdefault(agg_field, 0.0)
@@ -172,6 +204,7 @@ def write_daily_aggregation(client: InfluxDBClient, cfg: Config, d: date, data: 
 # All aggregated fields (energy + peaks)
 ENERGY_FIELDS = ["grid_import_kwh", "grid_export_kwh"]
 ALL_PEAK_FIELDS = list(PEAK_TO_AGG.values())
+ALL_MEAN_FIELDS = list(MEAN_TO_AGG.values())
 
 
 def _query_daily_range(client: InfluxDBClient, cfg: Config, start_utc: datetime, stop_utc: datetime) -> list:
@@ -183,7 +216,7 @@ def _query_daily_range(client: InfluxDBClient, cfg: Config, start_utc: datetime,
     start_str = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     stop_str = stop_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    all_fields = ENERGY_FIELDS + ALL_PEAK_FIELDS
+    all_fields = ENERGY_FIELDS + ALL_PEAK_FIELDS + ALL_MEAN_FIELDS
     fields_filter = " or ".join(f'r["_field"] == "{f}"' for f in all_fields)
 
     query = f'''from(bucket: "{cfg.influx_bucket}")
@@ -214,7 +247,7 @@ def _query_daily_range(client: InfluxDBClient, cfg: Config, start_utc: datetime,
 
 
 def _sum_and_max(daily_records: list) -> Optional[Dict[str, float]]:
-    """Compute rollup from a list of daily records: sum energy, max peaks.
+    """Compute rollup from a list of daily records: sum energy, max peaks, avg means.
 
     Returns None if no records.
     """
@@ -229,6 +262,12 @@ def _sum_and_max(daily_records: list) -> Optional[Dict[str, float]]:
     # Max peak fields
     for f in ALL_PEAK_FIELDS:
         result[f] = max((rec.get(f, 0.0) for rec in daily_records), default=0.0)
+
+    # Average mean fields (average of daily averages)
+    ALL_MEAN_FIELDS = list(MEAN_TO_AGG.values())
+    for f in ALL_MEAN_FIELDS:
+        values = [rec.get(f, 0.0) for rec in daily_records if rec.get(f) is not None]
+        result[f] = round(sum(values) / len(values), 2) if values else 0.0
 
     return result
 

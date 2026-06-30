@@ -771,17 +771,18 @@ async def get_grid_balance(range: str = "7d"):
         else:
             measurement = f"{AGG_PREFIX}_monthly"
 
-        # Query pre-aggregated data
+        # Query pre-aggregated data (energy + autonomy)
         query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: -{range_days}d)
   |> filter(fn: (r) => r["_measurement"] == "{measurement}")
-  |> filter(fn: (r) => r["_field"] == "grid_import_kwh" or r["_field"] == "grid_export_kwh")
+  |> filter(fn: (r) => r["_field"] == "grid_import_kwh" or r["_field"] == "grid_export_kwh" or r["_field"] == "avg_autonomy_pct")
   |> sort(columns: ["_time"])'''
 
         agg_result = query_api.query(query)
 
         import_by_key = {}
         export_by_key = {}
+        autonomy_by_key = {}
 
         for table in agg_result:
             for rec in table.records:
@@ -801,6 +802,8 @@ async def get_grid_balance(range: str = "7d"):
                     import_by_key[key] = float(val)
                 elif field == "grid_export_kwh":
                     export_by_key[key] = float(val)
+                elif field == "avg_autonomy_pct":
+                    autonomy_by_key[key] = float(val)
 
         now_local = to_local_time(datetime.now(timezone.utc))
 
@@ -834,11 +837,13 @@ async def get_grid_balance(range: str = "7d"):
 
         imp_vals = [import_by_key.get(k, 0.0) for k in ts_keys]
         exp_vals = [export_by_key.get(k, 0.0) for k in ts_keys]
+        autonomy_vals = [autonomy_by_key.get(k, 0.0) for k in ts_keys]
 
         return {
             "labels": labels,
             "import_kwh": [round(v, 2) for v in imp_vals],
             "export_kwh": [round(v, 2) for v in exp_vals],
+            "autonomy": [round(v, 1) for v in autonomy_vals],
             "range": time_range,
             "points": len(labels)
         }
