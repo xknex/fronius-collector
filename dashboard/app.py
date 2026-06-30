@@ -734,14 +734,15 @@ async def get_today_stats():
         return {"error": str(e)}
 
 @app.get("/api/data/balance")
-async def get_grid_balance(range: str = "today"):
-    """Return grid import and export totals for a selectable time range.
+async def get_grid_balance(range: str = "7d"):
+    """Return per-day or per-month grid import and export kWh values.
 
     Ranges:
-    - today: current day (partial, from raw data)
-    - 7d: last 7 days summed
-    - 1month: last 30 days summed
-    - 1year: last 12 months summed
+    - 7d: last 7 days (one bar per day)
+    - 1month: last 30 days (one bar per day)
+    - 1year: last 12 months (one bar per month)
+
+    Same structure as /api/data/economics but returns raw kWh instead of monetary values.
     """
     time_range = range
 
@@ -750,61 +751,96 @@ async def get_grid_balance(range: str = "today"):
 
     AGG_PREFIX = os.getenv("AGGREGATION_MEASUREMENT_PREFIX", "fronius_agg")
 
+    cfg = {
+        "7d":     {"range_days": 8,   "points": 7,  "label": "%a",     "bucket": "day"},
+        "1month": {"range_days": 31,  "points": 30, "label": "%d.%m.", "bucket": "day"},
+        "1year":  {"range_days": 366, "points": 12, "label": "%b %Y",  "bucket": "month"},
+    }
+    if time_range not in cfg:
+        return {"error": f"Invalid range. Supported: {', '.join(cfg.keys())}"}
+
+    range_days = cfg[time_range]["range_days"]
+    bucket_type = cfg[time_range]["bucket"]
+    points_expected = cfg[time_range]["points"]
+    label_fmt = cfg[time_range]["label"]
+
     try:
-        if time_range == "today":
-            # Use the two-point query for today's partial data
-            today_data = get_today_partial()
-            return {
-                "grid_import": round(today_data["grid_import_kwh"], 2),
-                "grid_export": round(today_data["grid_export_kwh"], 2),
-                "range": "today",
-                "label": "Today"
-            }
+        # Determine which aggregated measurement to query
+        if bucket_type == "day":
+            measurement = f"{AGG_PREFIX}_daily"
+        else:
+            measurement = f"{AGG_PREFIX}_monthly"
 
-        # For other ranges, sum from aggregated measurements
-        cfg_map = {
-            "7d":     {"range_days": 8,   "measurement": f"{AGG_PREFIX}_daily",   "label": "Last 7 Days"},
-            "1month": {"range_days": 31,  "measurement": f"{AGG_PREFIX}_daily",   "label": "Last 30 Days"},
-            "1year":  {"range_days": 366, "measurement": f"{AGG_PREFIX}_monthly", "label": "Last 12 Months"},
-        }
-
-        if time_range not in cfg_map:
-            return {"error": f"Invalid range. Supported: today, {', '.join(cfg_map.keys())}"}
-
-        range_days = cfg_map[time_range]["range_days"]
-        measurement = cfg_map[time_range]["measurement"]
-        label = cfg_map[time_range]["label"]
-
+        # Query pre-aggregated data
         query = f'''from(bucket: "{INFLUX_BUCKET}")
   |> range(start: -{range_days}d)
   |> filter(fn: (r) => r["_measurement"] == "{measurement}")
   |> filter(fn: (r) => r["_field"] == "grid_import_kwh" or r["_field"] == "grid_export_kwh")
-  |> sum()'''
+  |> sort(columns: ["_time"])'''
 
-        result = query_api.query(query)
+        agg_result = query_api.query(query)
 
-        grid_import = 0.0
-        grid_export = 0.0
-        for table in result:
-            for record in table.records:
-                field = record.values.get("_field")
-                value = record.get_value()
-                if field == "grid_import_kwh" and value is not None:
-                    grid_import = float(value)
-                elif field == "grid_export_kwh" and value is not None:
-                    grid_export = float(value)
+        import_by_key = {}
+        export_by_key = {}
 
-        # For 7d and 1month, also add today's partial
-        if time_range in ("7d", "1month"):
-            today_data = get_today_partial()
-            grid_import += today_data["grid_import_kwh"]
-            grid_export += today_data["grid_export_kwh"]
+        for table in agg_result:
+            for rec in table.records:
+                val = rec.get_value()
+                if val is None:
+                    continue
+                ts = rec.get_time()
+                local_ts = to_local_time(ts)
+                field = rec.values.get("_field")
+
+                if bucket_type == "day":
+                    key = local_ts.strftime("%Y-%m-%d")
+                else:
+                    key = local_ts.strftime("%Y-%m")
+
+                if field == "grid_import_kwh":
+                    import_by_key[key] = float(val)
+                elif field == "grid_export_kwh":
+                    export_by_key[key] = float(val)
+
+        now_local = to_local_time(datetime.now(timezone.utc))
+
+        # Add today's partial data
+        if bucket_type == "day":
+            today_key = now_local.date().strftime("%Y-%m-%d")
+            today_partial = get_today_partial()
+            import_by_key[today_key] = today_partial["grid_import_kwh"]
+            export_by_key[today_key] = today_partial["grid_export_kwh"]
+        else:
+            current_month_key = now_local.strftime("%Y-%m")
+            today_partial = get_today_partial()
+            import_by_key[current_month_key] = import_by_key.get(current_month_key, 0.0) + today_partial["grid_import_kwh"]
+            export_by_key[current_month_key] = export_by_key.get(current_month_key, 0.0) + today_partial["grid_export_kwh"]
+
+        # Build expected bucket keys and labels
+        if bucket_type == "day":
+            ts_keys = [(now_local.date() - timedelta(days=i)).strftime("%Y-%m-%d")
+                       for i in reversed(builtins_range(points_expected))]
+            labels = [datetime.strptime(k, "%Y-%m-%d").strftime(label_fmt) for k in ts_keys]
+        else:
+            y = now_local.year; m = now_local.month
+            ts_keys = []
+            for _ in builtins_range(points_expected):
+                ts_keys.append(f"{y:04d}-{m:02d}")
+                m -= 1
+                if m == 0:
+                    m = 12; y -= 1
+            ts_keys.reverse()
+            labels = [datetime.strptime(k, "%Y-%m").strftime(label_fmt) for k in ts_keys]
+
+        imp_vals = [import_by_key.get(k, 0.0) for k in ts_keys]
+        exp_vals = [export_by_key.get(k, 0.0) for k in ts_keys]
 
         return {
-            "grid_import": round(grid_import, 2),
-            "grid_export": round(grid_export, 2),
+            "labels": labels,
+            "import_kwh": [round(v, 2) for v in imp_vals],
+            "export_kwh": [round(v, 2) for v in exp_vals],
             "range": time_range,
-            "label": label
+            "points": len(labels)
         }
     except Exception as e:
         logger.error(f"Error querying grid balance for range {time_range}: {e}", exc_info=True)

@@ -607,8 +607,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div class="chart-title">Grid Balance</div>
                     <div class="timeframe-selector">
-                        <button class="timeframe-btn active" data-range="today">1D</button>
-                        <button class="timeframe-btn" data-range="7d">7D</button>
+                        <button class="timeframe-btn active" data-range="7d">7D</button>
                         <button class="timeframe-btn" data-range="1month">1M</button>
                         <button class="timeframe-btn" data-range="1year">1Y</button>
                     </div>
@@ -1059,10 +1058,10 @@
         }
 
         // Track current grid balance range
-        let currentGridBalanceRange = "today";
+        let currentGridBalanceRange = "7d";
 
         // Fetch grid balance data and update chart
-        async function updateGridBalance(range = "today") {
+        async function updateGridBalance(range = "7d") {
             try {
                 currentGridBalanceRange = range;
                 const response = await fetch(`/api/data/balance?range=${range}`);
@@ -1073,23 +1072,22 @@
                     return;
                 }
 
-                const gridImport = data.grid_import || 0;
-                const gridExport = data.grid_export || 0;
-
                 if (gridChart) {
-                    gridChart.data.datasets[0].data = [gridImport, gridExport];
-                    gridChart.data.datasets[0].label = `${data.label || range} (kWh)`;
+                    gridChart.data.labels = data.labels || [];
+                    gridChart.data.datasets[0].data = data.import_kwh || [];
+                    gridChart.data.datasets[1].data = data.export_kwh || [];
                     gridChart.update();
                 }
 
                 // Update active button state for grid balance chart
-                document.querySelectorAll('[data-range="today"], [data-range="7d"], [data-range="1month"], [data-range="1year"]').forEach(btn => {
-                    const isGridButton = btn.closest('.chart-card')?.querySelector('.chart-title')?.textContent.includes('Grid Balance');
-                    if (isGridButton) {
-                        btn.classList.remove('active');
-                        if (btn.dataset.range === range) {
-                            btn.classList.add('active');
-                        }
+                document.querySelectorAll('.chart-card').forEach(card => {
+                    if (card.querySelector('.chart-title')?.textContent.includes('Grid Balance')) {
+                        card.querySelectorAll('.timeframe-btn').forEach(btn => {
+                            btn.classList.remove('active');
+                            if (btn.dataset.range === range) {
+                                btn.classList.add('active');
+                            }
+                        });
                     }
                 });
             } catch (error) {
@@ -1097,7 +1095,7 @@
             }
         }
 
-        // Fetch today stats and update grid balance
+        // Fetch today stats and update status panels
         async function updateTodayStats() {
             try {
                 const response = await fetch('/api/data/today');
@@ -1106,16 +1104,6 @@
                 if (data.error) {
                     console.error('API error:', data.error);
                     return;
-                }
-
-                // Update grid balance chart (only if currently showing "today")
-                if (currentGridBalanceRange === "today") {
-                    const gridImport = data.grid_import || 0;
-                    const gridExport = data.grid_export || 0;
-                    if (gridChart) {
-                        gridChart.data.datasets[0].data = [gridImport, gridExport];
-                        gridChart.update('none');
-                    }
                 }
 
                 // Update status panels
@@ -1290,24 +1278,40 @@
                 }
             });
 
-            // Grid Balance Chart
+            // Grid Balance Chart (same structure as Economics but shows kWh)
             const gridCtx = document.getElementById('gridChart').getContext('2d');
             gridChart = new Chart(gridCtx, {
                 type: 'bar',
                 data: {
-                    labels: ['Import', 'Export'],
-                    datasets: [{
-                        label: 'Today (kWh)',
-                        data: [0, 0],
-                        backgroundColor: [colorConsumption, colorGrid],
-                        borderRadius: 4
-                    }]
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Import (kWh)',
+                            data: [],
+                            backgroundColor: colorConsumption,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Export (kWh)',
+                            data: [],
+                            backgroundColor: colorSuccess,
+                            borderRadius: 4
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     indexAxis: 'x',
                     scales: {
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 15
+                            }
+                        },
                         y: {
                             beginAtZero: true,
                             title: { display: true, text: 'Energy (kWh)' }
@@ -1317,6 +1321,14 @@
                         legend: {
                             display: true,
                             position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y || 0;
+                                    return `${context.dataset.label}: ${value.toFixed(2)} kWh`;
+                                }
+                            }
                         }
                     }
                 }
@@ -1327,6 +1339,7 @@
             await updateCurrentMetrics();
             await updatePowerChart("12h");
             await updateEconomicsChart("7d");
+            await updateGridBalance("7d");
             await updateTodayStats();
         }
 
